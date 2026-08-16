@@ -27,7 +27,9 @@ func TestChunkSecondsSkipsSingleShot(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg not installed")
 	}
-	t.Setenv("HOME", t.TempDir())
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
 
 	src := filepath.Join(t.TempDir(), "src.wav")
 	if err := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
@@ -57,7 +59,9 @@ func TestAutoModeShortAudioSkipsChunking(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg not installed")
 	}
-	t.Setenv("HOME", t.TempDir())
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
 
 	src := filepath.Join(t.TempDir(), "src.wav")
 	if err := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
@@ -77,7 +81,9 @@ func TestAutoModeShortAudioSkipsChunking(t *testing.T) {
 }
 
 func TestRunAuthMode(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("USERPROFILE", tempDir)
 	t.Setenv("GROQ_API_KEY", "")
 	t.Setenv("DEEPGRAM_API_KEY", "")
 	t.Setenv("ASSEMBLYAI_API_KEY", "")

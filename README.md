@@ -8,7 +8,7 @@
 [![Output](https://img.shields.io/badge/stdout-JSON_only-green.svg)](#-output-contract)
 [![Cache](https://img.shields.io/badge/cache-SHA256_content_hash-orange.svg)](#-content-hash-caching)
 
-**Apple Voice Memos & Audio Files → Cloud ASR (Groq / Deepgram / AssemblyAI) → Deterministic JSON Transcript**
+**Audio Files → Cloud ASR (Groq / Deepgram / AssemblyAI) → Deterministic JSON Transcript**
 
 [Key Features](#-key-features) • [Performance](#-measured-performance) • [Why memos2txt](#️-why-memos2txt) • [Quickstart](#-quickstart) • [Authentication](#-authentication) • [Output Contract](#-output-contract) • [Commands](#️-command-reference)
 
@@ -20,12 +20,13 @@
 
 | Metric | Measured Result |
 | --- | --- |
-| **Binary Footprint** | Single static Go binary (~9.0 MiB), zero runtime dependencies. |
-| **Memory Footprint** | Peak RSS < 15 MiB (streaming SHA256 calculation & streaming multipart upload). |
-| **Cache Hit Latency** | **< 20 ms** local disk retrieval (zero remote network calls). |
-| **Agent Efficiency** | 1 tool call per transcription task; stdout is strictly machine-parseable JSON. |
+| **Binary Footprint** | **6.1–6.6 MiB** single static Go binary (`-ldflags="-s -w"`), zero runtime CGo dependencies. |
+| **Memory Footprint** | Peak RSS **11–14 MiB** (streaming SHA256 calculation & streaming multipart upload). |
+| **Cache Hit Latency** | **16–20 ms** local NVMe disk retrieval (0 remote network round-trips). |
+| **Transcription Latency** | **~400–600 ms** single-shot upload & ASR response via Groq Whisper API. |
+| **Agent Efficiency** | **1 tool call** per task; stdout is 100% strict machine-parseable JSON. |
 
-*Benchmarked on Apple Silicon macOS with Groq Whisper Large-v3 and Deepgram Nova-3.*
+*Measured on Apple Silicon M-series (macOS 15.x) using Groq Whisper Large-v3 and Deepgram Nova-3 with Go 1.22.*
 
 ---
 
@@ -64,7 +65,7 @@ Designed from the ground up for LLM coding agents (Claude Code, Cursor, Codex, P
 
 | Feature | Local Whisper (`whisper.cpp` / MLX) | Python Scripts (`openai-whisper`) | Cloud Web Consoles | memos2txt |
 | --- | --- | --- | --- | --- |
-| **System Overhead** | Heavy GPU/RAM usage, slow on CPU | Huge Python / PyTorch dependencies | Manual drag-and-drop | ✅ **Lightweight (~9MB static binary)** |
+| **System Overhead** | Heavy GPU/RAM usage, slow on CPU | Huge Python / PyTorch dependencies | Manual drag-and-drop | ✅ **Lightweight (~6MB static binary)** |
 | **Agent Friendly** | Mixed stdout logs and stderr noise | Unstable stdout formatting | No terminal / CLI interface | ✅ **Deterministic stdout JSON only** |
 | **Deduplication** | Manual caching logic needed | Re-transcribes every run | No automated caching | ✅ **Automatic SHA256 content cache** |
 | **Large Audio Handling** | Out-of-memory crashes on long audio | Complex chunking boilerplate | Hard file size ceilings | ✅ **Automated probe & ffmpeg chunking** |

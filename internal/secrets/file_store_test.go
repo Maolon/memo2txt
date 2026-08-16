@@ -3,12 +3,14 @@ package secrets
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
 func TestFileStoreSetGetDelete(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	s, err := newFileStore("memos2txt")
 	if err != nil {
@@ -42,7 +44,7 @@ func TestFileStoreSetGetDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
 		t.Fatalf("perm=%o", st.Mode().Perm())
 	}
 }
