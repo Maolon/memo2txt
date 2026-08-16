@@ -75,44 +75,55 @@ Designed from the ground up for LLM coding agents (Claude Code, Cursor, Codex, P
 
 ## 🚀 Quickstart
 
-### For AI Coding Agents
+### 🤖 For AI Coding Agents
 
-Install the agent skill:
+Install the agent skill via the standard `skills` CLI:
+
 ```bash
-# Available under skill/SKILL.md
-# Reference directly or copy to your agent's skills directory:
-mkdir -p ~/.codex/skills/memo2txt
-cp -r skill/* ~/.codex/skills/memo2txt/
+# Standard npx skills convention (Claude Code, Codex, Pi, Cursor)
+npx -y skills add Maolon/memo2txt
 ```
 
-### For Humans
+*Or manually copy the skill files into your agent's skill directory (`~/.claude/skills/memo2txt` or `~/.codex/skills/memo2txt`).*
 
-**1. Build and Install**
+---
+
+### 👤 For Humans
+
+#### Option A: One-Line Curl Installer (Recommended for macOS & Linux)
 
 ```bash
-git clone https://github.com/Maolon/memo2txt.git
-cd memo2txt
-go build -o /usr/local/bin/memos2txt ./cmd/memos2txt
+curl -fsSL https://raw.githubusercontent.com/Maolon/memo2txt/main/install.sh | bash
 ```
 
-**2. Configure API Credentials**
+#### Option B: Homebrew Tap
 
 ```bash
-# Check status across all providers
-memos2txt auth --list
+brew install Maolon/tap/memos2txt
+```
 
-# Store your API key into Keychain / Credential Manager
+#### Option C: Go Install (Build from Source)
+
+```bash
+go install github.com/Maolon/memo2txt/cmd/memos2txt@latest
+```
+
+*Prebuilt standalone binaries for Windows, macOS, and Linux are also directly downloadable from [GitHub Releases](https://github.com/Maolon/memo2txt/releases/latest).*
+
+---
+
+### 🔑 Configure Credentials & Run
+
+```bash
+# 1. Store your API key into native Keychain / Credential Manager
 echo "gsk_your_groq_key" | memos2txt auth groq --api-key-stdin
 echo "your_deepgram_key" | memos2txt auth deepgram --api-key-stdin
-```
 
-**3. Transcribe an Audio File**
+# 2. Check configuration status
+memos2txt auth --list
 
-```bash
-# Transcribe via Groq Whisper
+# 3. Transcribe an Audio File
 memos2txt --provider groq --file "/path/to/meeting.m4a" --json
-
-# Transcribe with Deepgram Speaker Diarization
 memos2txt --provider deepgram --file "/path/to/interview.m4a" --json
 ```
 
