@@ -83,7 +83,15 @@ func (s TranscriptStore) WriteTranscript(path, text string) error {
 	if err := os.WriteFile(tmp, []byte(text), 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		// On Windows, rename fails if destination already exists. Remove and retry.
+		_ = os.Remove(path)
+		if err := os.Rename(tmp, path); err != nil {
+			_ = os.Remove(tmp)
+			return err
+		}
+	}
+	return nil
 }
 
 func (s TranscriptStore) WriteMetadata(path string, md Metadata) error {
@@ -98,7 +106,15 @@ func (s TranscriptStore) WriteMetadata(path string, md Metadata) error {
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		// On Windows, rename fails if destination already exists. Remove and retry.
+		_ = os.Remove(path)
+		if err := os.Rename(tmp, path); err != nil {
+			_ = os.Remove(tmp)
+			return err
+		}
+	}
+	return nil
 }
 
 func safeFileName(k Key) string {

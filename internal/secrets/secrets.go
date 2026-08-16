@@ -19,7 +19,7 @@ type Store interface {
 
 func NewStore(kind, service string) (Store, error) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "keychain":
+	case "keychain", "keyring", "wincred", "credential_manager":
 		return newKeychainStore(service)
 	case "file":
 		return newFileStore(service)

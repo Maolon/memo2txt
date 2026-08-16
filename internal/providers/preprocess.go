@@ -86,7 +86,7 @@ func SegmentToChunks(ctx context.Context, inputPath, chunksDir string, opts Prep
 		return nil, ProviderError{Code: schema.ErrProviderError, Message: "Failed to create chunk dir.", Detail: err.Error()}
 	}
 
-	pattern := filepath.Join(chunksDir, "chunk_%03d.mp3")
+	pattern := filepath.ToSlash(filepath.Join(chunksDir, "chunk_%03d.mp3"))
 	args := []string{
 		"-hide_banner",
 		"-y",

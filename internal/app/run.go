@@ -436,7 +436,7 @@ func resolveStore(store string) string {
 	if s != "" {
 		return s
 	}
-	if runtime.GOOS == "darwin" {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		return "keychain"
 	}
 	return "file"

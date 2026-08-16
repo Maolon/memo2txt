@@ -2,7 +2,6 @@ package secrets
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,10 +90,13 @@ func (s *fileStore) write(cfg fileConfig) error {
 		return err
 	}
 	if err := os.Rename(tmp, s.path); err != nil {
-		return err
+		// On Windows, rename fails if destination already exists. Remove and retry.
+		_ = os.Remove(s.path)
+		if err := os.Rename(tmp, s.path); err != nil {
+			_ = os.Remove(tmp)
+			return err
+		}
 	}
-	if err := os.Chmod(s.path, 0o600); err != nil {
-		return fmt.Errorf("chmod config: %w", err)
-	}
+	_ = os.Chmod(s.path, 0o600)
 	return nil
 }
