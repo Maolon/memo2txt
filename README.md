@@ -20,13 +20,14 @@
 
 | Metric | Measured Result |
 | --- | --- |
-| **Binary Footprint** | **6.1–6.6 MiB** single static Go binary (`-ldflags="-s -w"`), zero runtime CGo dependencies. |
+| **Download Size** | **2.3–2.5 MiB** compressed distribution archive (`.tar.gz` / `.zip`). |
+| **Binary Footprint** | **5.9–6.6 MiB** single static Go executable (`-ldflags="-s -w"`), zero runtime CGo dependencies. |
 | **Memory Footprint** | Peak RSS **11–14 MiB** (streaming SHA256 calculation & streaming multipart upload). |
 | **Cache Hit Latency** | **16–20 ms** local NVMe disk retrieval (0 remote network round-trips). |
 | **Transcription Latency** | **~400–600 ms** single-shot upload & ASR response via Groq Whisper API. |
 | **Agent Efficiency** | **1 tool call** per task; stdout is 100% strict machine-parseable JSON. |
 
-*Measured on Apple Silicon M-series (macOS 15.x) using Groq Whisper Large-v3 and Deepgram Nova-3 with Go 1.22.*
+*Measured on Apple Silicon M-series (macOS 15.x) using Groq Whisper Large-v3 and Deepgram Nova-3 with Go 1.23.*
 
 ---
 
@@ -65,7 +66,7 @@ Designed from the ground up for LLM coding agents (Claude Code, Cursor, Codex, P
 
 | Feature | Local Whisper (`whisper.cpp` / MLX) | Python Scripts (`openai-whisper`) | Cloud Web Consoles | memos2txt |
 | --- | --- | --- | --- | --- |
-| **System Overhead** | Heavy GPU/RAM usage, slow on CPU | Huge Python / PyTorch dependencies | Manual drag-and-drop | ✅ **Lightweight (~6MB static binary)** |
+| **System Overhead** | Heavy GPU/RAM usage, slow on CPU | Huge Python / PyTorch dependencies | Manual drag-and-drop | ✅ **Lightweight (~2.4MB archive / ~6MB binary)** |
 | **Agent Friendly** | Mixed stdout logs and stderr noise | Unstable stdout formatting | No terminal / CLI interface | ✅ **Deterministic stdout JSON only** |
 | **Deduplication** | Manual caching logic needed | Re-transcribes every run | No automated caching | ✅ **Automatic SHA256 content cache** |
 | **Large Audio Handling** | Out-of-memory crashes on long audio | Complex chunking boilerplate | Hard file size ceilings | ✅ **Automated probe & ffmpeg chunking** |
