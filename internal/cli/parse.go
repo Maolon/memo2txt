@@ -84,6 +84,23 @@ func parseAuth(args []string) (app.Config, ParseResult) {
 	cfg.AuthMode = true
 	cfg.JSON = true
 
+	var flags []string
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+			if (arg == "-store" || arg == "--store" || arg == "-api-key" || arg == "--api-key" ||
+				arg == "-provider" || arg == "--provider" || arg == "-adapter" || arg == "--adapter") &&
+				i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+				flags = append(flags, args[i])
+			}
+		} else {
+			positional = append(positional, arg)
+		}
+	}
+
 	fs := flag.NewFlagSet("memos2txt auth", flag.ContinueOnError)
 	fs.SetOutput(&bytes.Buffer{})
 
@@ -104,21 +121,15 @@ func parseAuth(args []string) (app.Config, ParseResult) {
 	fs.BoolVar(&cfg.AuthList, "list", false, "List authentication status for all adapters.")
 	fs.BoolVar(&cfg.JSONIndent, "json-indent", false, "Pretty-print JSON.")
 
-	var remainingArgs []string
-	for _, arg := range args {
-		if !strings.HasPrefix(arg, "-") && cfg.Provider == "" && !cfg.AuthList {
-			cfg.Provider = arg
-		} else {
-			remainingArgs = append(remainingArgs, arg)
-		}
-	}
-
-	if err := fs.Parse(remainingArgs); err != nil {
+	if err := fs.Parse(flags); err != nil {
 		cfg.ParseError = strings.TrimSpace(err.Error())
 		return cfg, ParseResultError
 	}
 	if help {
 		return cfg, ParseResultHelp
+	}
+	if cfg.Provider == "" && len(positional) > 0 {
+		cfg.Provider = strings.TrimSpace(positional[0])
 	}
 	cfg.UnsetAPIKey = unset || deleteKey || unsetAPIKey
 	return cfg, ParseResultOK
