@@ -18,6 +18,10 @@ const (
 )
 
 func Parse(args []string) (app.Config, ParseResult) {
+	if len(args) > 0 && args[0] == "auth" {
+		return parseAuth(args[1:])
+	}
+
 	var cfg app.Config
 
 	fs := flag.NewFlagSet("memos2txt", flag.ContinueOnError)
@@ -54,8 +58,11 @@ func Parse(args []string) (app.Config, ParseResult) {
 	fs.IntVar(&cfg.PreprocessSampleRateHz, "preprocess-sample-rate-hz", 16000, "Audio sample rate (Hz) when preprocessing (default 16000).")
 	fs.BoolVar(&cfg.KeepTemp, "keep-temp", false, "Keep temporary chunk files (default false).")
 
+	var unset, deleteKey bool
 	fs.BoolVar(&cfg.Setup, "setup", false, "Setup API key storage and exit (see -h).")
 	fs.BoolVar(&cfg.UnsetAPIKey, "unset-api-key", false, "Delete stored API key for --provider and exit (requires --setup).")
+	fs.BoolVar(&unset, "unset", false, "Alias for --unset-api-key.")
+	fs.BoolVar(&deleteKey, "delete", false, "Alias for --unset-api-key.")
 	fs.StringVar(&cfg.APIKey, "api-key", "", "API key value (WARNING: may leak via shell history / process list). Prefer --api-key-stdin or interactive.")
 	fs.BoolVar(&cfg.APIKeyStdin, "api-key-stdin", false, "Read API key from stdin (recommended for scripting).")
 
@@ -66,6 +73,54 @@ func Parse(args []string) (app.Config, ParseResult) {
 	if help {
 		return cfg, ParseResultHelp
 	}
+	if unset || deleteKey {
+		cfg.UnsetAPIKey = true
+	}
+	return cfg, ParseResultOK
+}
+
+func parseAuth(args []string) (app.Config, ParseResult) {
+	var cfg app.Config
+	cfg.AuthMode = true
+	cfg.JSON = true
+
+	fs := flag.NewFlagSet("memos2txt auth", flag.ContinueOnError)
+	fs.SetOutput(&bytes.Buffer{})
+
+	var help bool
+	fs.BoolVar(&help, "h", false, "Show help and exit.")
+	fs.BoolVar(&help, "help", false, "Show help and exit.")
+
+	var unset, deleteKey, unsetAPIKey bool
+	fs.BoolVar(&unset, "unset", false, "Delete stored API key for adapter.")
+	fs.BoolVar(&deleteKey, "delete", false, "Delete stored API key for adapter.")
+	fs.BoolVar(&unsetAPIKey, "unset-api-key", false, "Delete stored API key for adapter.")
+
+	fs.StringVar(&cfg.Provider, "provider", "", "Provider/adapter name: groq|deepgram|assemblyai.")
+	fs.StringVar(&cfg.Provider, "adapter", "", "Provider/adapter name: groq|deepgram|assemblyai.")
+	fs.StringVar(&cfg.APIKey, "api-key", "", "API key value.")
+	fs.BoolVar(&cfg.APIKeyStdin, "api-key-stdin", false, "Read API key from stdin.")
+	fs.StringVar(&cfg.Store, "store", "", "Storage backend: keychain|file.")
+	fs.BoolVar(&cfg.AuthList, "list", false, "List authentication status for all adapters.")
+	fs.BoolVar(&cfg.JSONIndent, "json-indent", false, "Pretty-print JSON.")
+
+	var remainingArgs []string
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-") && cfg.Provider == "" && !cfg.AuthList {
+			cfg.Provider = arg
+		} else {
+			remainingArgs = append(remainingArgs, arg)
+		}
+	}
+
+	if err := fs.Parse(remainingArgs); err != nil {
+		cfg.ParseError = strings.TrimSpace(err.Error())
+		return cfg, ParseResultError
+	}
+	if help {
+		return cfg, ParseResultHelp
+	}
+	cfg.UnsetAPIKey = unset || deleteKey || unsetAPIKey
 	return cfg, ParseResultOK
 }
 

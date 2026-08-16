@@ -58,8 +58,9 @@ type ErrorInfo struct {
 }
 
 type SetupInfo struct {
-	Store  string `json:"store,omitempty"`
-	EnvVar string `json:"env_var,omitempty"`
+	Store  string            `json:"store,omitempty"`
+	EnvVar string            `json:"env_var,omitempty"`
+	Status map[string]string `json:"status,omitempty"`
 }
 
 type PreprocessInfo struct {

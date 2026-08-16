@@ -15,31 +15,28 @@ Apple Voice Memos (`.m4a`) → Cloud ASR (Groq/Deepgram/AssemblyAI) → stable J
 go build -o bin/memos2txt ./cmd/memos2txt
 ```
 
-## API key setup (inside the CLI; no subcommands)
+## Authentication (`memos2txt auth <adapter>`)
 
-Recommended on macOS: store in **Keychain** (default store).
-
-Interactive (recommended):
+Manage API keys in the environment store (**Keychain** by default on macOS, `~/.memos2txt/config.json` on Linux):
 
 ```bash
-memos2txt --setup --provider groq
-```
+# Interactive setup (input hidden)
+memos2txt auth groq
+memos2txt auth deepgram
+memos2txt auth assemblyai
 
-Non-interactive (recommended for scripts):
+# Non-interactive / CI (from stdin)
+echo "$GROQ_API_KEY" | memos2txt auth groq --api-key-stdin
 
-```bash
-echo "$GROQ_API_KEY" | memos2txt --setup --provider groq --api-key-stdin
-```
+# Check status of all adapters
+memos2txt auth --list
 
-Remove stored key:
-
-```bash
-memos2txt --setup --provider groq --unset-api-key
+# Remove stored key
+memos2txt auth groq --unset
 ```
 
 Runtime lookup order:
-
-1. `GROQ_API_KEY` environment variable
+1. Environment variable (e.g. `GROQ_API_KEY`, `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`)
 2. Configured store (`--store keychain|file`)
 
 ## Usage

@@ -50,6 +50,8 @@ type Config struct {
 	KeepTemp               bool
 
 	Setup       bool
+	AuthMode    bool
+	AuthList    bool
 	UnsetAPIKey bool
 	APIKey      string
 	APIKeyStdin bool
@@ -58,26 +60,58 @@ type Config struct {
 }
 
 func Run(ctx context.Context, cfg Config) (schema.Response, error) {
-	if cfg.Setup {
+	if cfg.Setup || cfg.AuthMode {
 		return runSetup(cfg)
 	}
 	return runTranscribe(ctx, cfg)
 }
 
 func runSetup(cfg Config) (schema.Response, error) {
+	mode := "setup"
+	if cfg.AuthMode {
+		mode = "auth"
+	}
+
 	provider := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	storeKind := resolveStore(cfg.Store)
+	store, err := secrets.NewStore(storeKind, "memos2txt")
+	if err != nil {
+		return schema.ErrorResponse(schema.ErrProviderError, "Failed to initialize secret store.", err.Error()), nil
+	}
+
+	if cfg.AuthList || (cfg.AuthMode && provider == "") {
+		status := make(map[string]string)
+		for _, p := range providers.AllProviders() {
+			envVar, _ := providers.EnvVarForProvider(p)
+			if os.Getenv(envVar) != "" {
+				status[p] = "configured (env: " + envVar + ")"
+			} else {
+				if v, getErr := store.Get(envVar); getErr == nil && v != "" {
+					status[p] = "configured (store: " + store.Kind() + ")"
+				} else {
+					status[p] = "not configured"
+				}
+			}
+		}
+		return schema.Response{
+			OK:   true,
+			Mode: mode,
+			Setup: &schema.SetupInfo{
+				Store:  store.Kind(),
+				Status: status,
+			},
+			Note:    "Authentication status for available adapters.",
+			Version: Version,
+		}, nil
+	}
+
 	if provider == "" {
-		return schema.ErrorResponse(schema.ErrInvalidArgs, "Missing --provider in setup mode.", ""), nil
+		return schema.ErrorResponse(schema.ErrInvalidArgs, "Missing provider/adapter name.", "Example: memos2txt auth groq"), nil
 	}
 
 	envVar, ok := providers.EnvVarForProvider(provider)
 	if !ok {
 		return schema.ErrorResponse(schema.ErrInvalidArgs, "Unsupported provider.", "provider="+provider), nil
-	}
-
-	store, err := secrets.NewStore(resolveStore(cfg.Store), "memos2txt")
-	if err != nil {
-		return schema.ErrorResponse(schema.ErrProviderError, "Failed to initialize secret store.", err.Error()), nil
 	}
 
 	if cfg.UnsetAPIKey {
@@ -86,13 +120,14 @@ func runSetup(cfg Config) (schema.Response, error) {
 		}
 		return schema.Response{
 			OK:       true,
-			Mode:     "setup",
+			Mode:     mode,
 			Provider: provider,
 			Setup: &schema.SetupInfo{
 				Store:  store.Kind(),
 				EnvVar: envVar,
 			},
-			Note: "API key deleted.",
+			Note:    "API key deleted for " + provider + ".",
+			Version: Version,
 		}, nil
 	}
 
@@ -110,13 +145,14 @@ func runSetup(cfg Config) (schema.Response, error) {
 
 	return schema.Response{
 		OK:       true,
-		Mode:     "setup",
+		Mode:     mode,
 		Provider: provider,
 		Setup: &schema.SetupInfo{
 			Store:  store.Kind(),
 			EnvVar: envVar,
 		},
-		Note: "API key stored. Runtime lookup order: env var, then configured store.",
+		Note:    "API key stored for " + provider + ". Runtime lookup order: env var, then configured store.",
+		Version: Version,
 	}, nil
 }
 

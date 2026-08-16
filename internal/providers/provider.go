@@ -17,6 +17,10 @@ type TranscribeOptions struct {
 	Punctuate   bool
 }
 
+func AllProviders() []string {
+	return []string{"groq", "deepgram", "assemblyai"}
+}
+
 func EnvVarForProvider(provider string) (string, bool) {
 	switch provider {
 	case "groq":

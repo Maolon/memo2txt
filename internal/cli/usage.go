@@ -4,23 +4,29 @@ func HelpText() string {
 	return `memos2txt — Apple Voice Memos → Groq Whisper → JSON transcript
 
 USAGE
-  memos2txt --provider groq|deepgram|assemblyai --file  "/path/to/audio.m4a" [flags]
+  memos2txt --provider groq|deepgram|assemblyai --file "/path/to/audio.m4a" [flags]
+  memos2txt auth <adapter> [flags]
+  memos2txt auth --list
+
+AUTHENTICATION COMMAND
+  Set API key for an adapter (groq | deepgram | assemblyai):
+    memos2txt auth groq
+    memos2txt auth deepgram
+    memos2txt auth assemblyai
+
+  Non-interactive (recommended for scripts / CI):
+    echo "$GROQ_API_KEY" | memos2txt auth groq --api-key-stdin
+
+  Delete stored key:
+    memos2txt auth groq --unset
+
+  Check status of all adapters:
+    memos2txt auth --list
+
+  Storage backend:
+    --store keychain|file (default: keychain on macOS, file ~/.memos2txt/config.json on Linux)
 
 MACOS PERMISSIONS NOTE
-  Voice Memos recordings may live under macOS-protected folders (TCC). If you can’t access
-  them directly, export a memo from Voice Memos to a normal folder (e.g. Downloads) and use --file.
-
-SETUP API KEY (no subcommands; keep proposal style)
-  Interactive (recommended):
-    memos2txt --setup --provider groq
-    memos2txt --setup --provider deepgram
-    memos2txt --setup --provider assemblyai
-
-  Non-interactive (recommended for scripts; avoids process list & shell history):
-    echo "$GROQ_API_KEY" | memos2txt --setup --provider groq --api-key-stdin
-
-  Remove stored key:
-    memos2txt --setup --provider groq --unset-api-key
 
 RUNTIME API KEY LOOKUP ORDER
   1) Environment variable (e.g. GROQ_API_KEY)

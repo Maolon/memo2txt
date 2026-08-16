@@ -75,3 +75,58 @@ func TestAutoModeShortAudioSkipsChunking(t *testing.T) {
 		t.Fatalf("auto+short should single-shot normalized.mp3, got %v", ft.paths)
 	}
 }
+
+func TestRunAuthMode(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GROQ_API_KEY", "")
+	t.Setenv("DEEPGRAM_API_KEY", "")
+	t.Setenv("ASSEMBLYAI_API_KEY", "")
+	ctx := context.Background()
+
+	// 1. Set key via auth command
+	resp, err := Run(ctx, Config{
+		AuthMode: true,
+		Provider: "groq",
+		APIKey:   "gsk-test-key-12345",
+		Store:    "file",
+	})
+	if err != nil {
+		t.Fatalf("Run auth set error: %v", err)
+	}
+	if !resp.OK || resp.Mode != "auth" || resp.Provider != "groq" {
+		t.Fatalf("unexpected auth set response: %+v", resp)
+	}
+
+	// 2. Query status list
+	respList, err := Run(ctx, Config{
+		AuthMode: true,
+		AuthList: true,
+		Store:    "file",
+	})
+	if err != nil {
+		t.Fatalf("Run auth list error: %v", err)
+	}
+	if !respList.OK || respList.Setup == nil {
+		t.Fatalf("unexpected auth list response: %+v", respList)
+	}
+	if status := respList.Setup.Status["groq"]; status != "configured (store: file)" {
+		t.Errorf("expected groq status to be configured, got %q", status)
+	}
+	if status := respList.Setup.Status["deepgram"]; status != "not configured" {
+		t.Errorf("expected deepgram status to be not configured, got %q", status)
+	}
+
+	// 3. Unset key
+	respUnset, err := Run(ctx, Config{
+		AuthMode:    true,
+		Provider:    "groq",
+		UnsetAPIKey: true,
+		Store:       "file",
+	})
+	if err != nil {
+		t.Fatalf("Run auth unset error: %v", err)
+	}
+	if !respUnset.OK {
+		t.Fatalf("unexpected auth unset response: %+v", respUnset)
+	}
+}
