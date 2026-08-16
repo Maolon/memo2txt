@@ -88,7 +88,6 @@ Default location:
 
 `~/.memos2txt/transcripts/<sha256>.<provider>.<model>.<lang>.d?.p?.txt`
 
-## Docs
+## Schema
 
-- Proposal: `docs/purposal.md`
-- Technical doc: `docs/technical.md`
+- Output Schema: `docs/output.schema.json`
