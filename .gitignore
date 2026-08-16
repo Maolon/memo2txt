@@ -1,0 +1,23 @@
+# Binaries and build artifacts
+/bin/
+/dist/
+/memos2txt
+/memo2txt
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Cache and temporary files
+.memos2txt/
+.memo2txt/
+tmp/
+*.tmp
+
+# OS & Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
