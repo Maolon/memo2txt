@@ -38,18 +38,37 @@ esac
 TARBALL="memos2txt-${OS}-${ARCH}.tar.gz"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${TARBALL}"
 
-echo "==> Downloading ${BINARY_NAME} (${OS}/${ARCH}) from ${DOWNLOAD_URL}..."
+echo "==> Downloading ${BINARY_NAME} (${OS}/${ARCH})..."
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-if curl -fsSL -H "Accept: application/octet-stream" "${DOWNLOAD_URL}" -o "${TMP_DIR}/${TARBALL}" 2>/dev/null; then
+# 1. Try gh CLI if available (supports private repos automatically)
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  echo "==> Using GitHub CLI to fetch release asset from ${REPO}..."
+  gh release download --repo "${REPO}" --pattern "${TARBALL}" --dir "${TMP_DIR}" --clobber 2>/dev/null || true
+fi
+
+# 2. Try direct curl download (with optional token for private repos)
+if [ ! -f "${TMP_DIR}/${TARBALL}" ]; then
+  AUTH_HEADER=()
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    AUTH_HEADER=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  elif [ -n "${GH_TOKEN:-}" ]; then
+    AUTH_HEADER=(-H "Authorization: Bearer ${GH_TOKEN}")
+  fi
+  curl -fsSL "${AUTH_HEADER[@]}" -H "Accept: application/octet-stream" "${DOWNLOAD_URL}" -o "${TMP_DIR}/${TARBALL}" 2>/dev/null || true
+fi
+
+if [ -f "${TMP_DIR}/${TARBALL}" ]; then
   tar -xzf "${TMP_DIR}/${TARBALL}" -C "${TMP_DIR}"
-  
-  # Find extracted binary
   EXTRACTED_BIN="${TMP_DIR}/${BINARY_NAME}"
   if [ ! -f "$EXTRACTED_BIN" ]; then
     EXTRACTED_BIN="${TMP_DIR}/memos2txt-${OS}-${ARCH}"
   fi
+elif [ -f "./cmd/memos2txt/main.go" ]; then
+  echo "==> Building directly from local source directory..."
+  go build -trimpath -ldflags="-s -w" -o "${TMP_DIR}/${BINARY_NAME}" ./cmd/memos2txt
+  EXTRACTED_BIN="${TMP_DIR}/${BINARY_NAME}"
 else
   echo "==> Release binary not found, attempting fallback to build from source via Go..."
   if command -v go >/dev/null 2>&1; then
@@ -62,9 +81,11 @@ else
   fi
 fi
 
+INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+
 # Check install location write permissions
 if [ ! -w "$INSTALL_DIR" ]; then
-  if command -v sudo >/dev/null 2>&1; then
+  if [ -t 0 ] && command -v sudo >/dev/null 2>&1; then
     echo "==> Installing to ${INSTALL_DIR} (requires sudo)..."
     sudo cp "$EXTRACTED_BIN" "${INSTALL_DIR}/${BINARY_NAME}"
     sudo chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
