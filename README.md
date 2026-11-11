@@ -45,14 +45,15 @@ Connect local `.m4a`, `.caf`, `.mp3`, and `.wav` audio files directly to industr
 Provider taxonomy is explicit: `option.category` is `"cloud"` or `"local"`; the provider id for local ASR is `mlx-whisper` (not `local`).
 
 ### 2. 🗣️ Local Speaker Diarization (pyannote community-1)
-Run the full local labeling pipeline — no cloud ASR and no cloud diarization:
+Run the full local labeling pipeline — one provider operation, equivalent to Deepgram doing transcription + diarization together:
 ```bash
 memos2txt diarizer install
-memos2txt --provider mlx-whisper --file meeting.m4a --diarizer pyannote --json
+memos2txt --provider mlx-whisper --file meeting.m4a --diarization=true --json
 ```
-* Uses `pyannote/speaker-diarization-community-1` in a managed Python environment (`~/.memos2txt/envs/pyannote`).
+* Uses `pyannote/speaker-diarization-community-1` internally in a managed Python environment (`~/.memos2txt/envs/pyannote`).
 * Assigns speakers from word-level Whisper timestamps with overlap-aware turns and short-run smoothing.
-* Outputs `Speaker 1:`-style labels plus a deterministic `diarization` block with speaker counts and speech seconds.
+* Outputs Deepgram-compatible `[Speaker:N]` labels plus a deterministic `diarization` block with speaker counts and speech seconds.
+* When `--diarization` is omitted, local diarization auto-enables if the runtime and HF token are ready; otherwise local transcription runs plain with an explanatory note. Use `--diarization=false` to force plain transcription.
 * Requires `HF_TOKEN` (model is gated) and `ffmpeg`. Accept the model terms on Hugging Face first.
 
 ### 3. ⚡ Deterministic Content-Hash Caching
@@ -160,14 +161,17 @@ memos2txt diarizer install
 #    then store the token inside the OS credential store
 echo "$HF_TOKEN" | memos2txt auth huggingface --api-key-stdin
 
-# 3. Transcribe + diarize, fully local
-memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" --diarizer pyannote --json
+# 3. Transcribe + diarize, fully local (same provider pipeline as Deepgram)
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" --diarization=true --json
 
 # Optional: timestamps, known speaker count, CPU-only
 memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
-  --diarizer pyannote --num-speakers 3 --timestamps --json
+  --diarization=true --num-speakers 3 --timestamps --json
 memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
-  --diarizer pyannote --diarizer-device cpu --json
+  --diarization=true --diarization-device cpu --json
+
+# Force plain local transcription (no speaker labels)
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" --diarization=false --json
 
 # Runtime status / removal
 memos2txt diarizer status
@@ -239,10 +243,9 @@ memos2txt --provider <groq|deepgram|assemblyai|mlx-whisper> --file <path> [flags
 | `--provider <id>` | *(required)* | Cloud: `groq`, `deepgram`, `assemblyai`. Local: `mlx-whisper`. |
 | `--model <string>` | Provider default | Model override (cloud model id or MLX HF repo / local path). |
 | `--language <string>` | `auto` | Language hint (`en`, `zh`, `es`, etc.). |
-| `--diarization` | `true` *(Deepgram)* | Provider-native diarization for cloud providers. |
-| `--diarizer <name>` | `auto` | Local diarization backend: `pyannote`, `none`, `auto`. |
-| `--diarizer-model <repo>` | `pyannote/speaker-diarization-community-1` | pyannote pipeline override. |
-| `--diarizer-device <dev>` | `auto` | `auto`, `cpu`, `mps`, or `cuda`. GPU falls back to CPU on failure. |
+| `--diarization` | `auto` *(local)* | Run transcription + speaker labeling as one pipeline. Local auto-enables when runtime/token are ready; Deepgram defaults true. |
+| `--diarization-model <repo>` | `pyannote/speaker-diarization-community-1` | pyannote pipeline override (local). |
+| `--diarization-device <dev>` | `auto` | `auto`, `cpu`, `mps`, or `cuda` (local). GPU falls back to CPU on failure. |
 | `--num-speakers N` | `0` *(infer)* | Exact speaker count. |
 | `--min-speakers N` / `--max-speakers N` | `0` | Speaker count bounds. |
 | `--timestamps` | `false` | Prefix diarized lines with `[MM:SS]`. |
@@ -293,7 +296,7 @@ memos2txt diarizer uninstall
   "output": {
     "transcript_path": "/Users/user/.memos2txt/transcripts/abc123hash.mlx-whisper.mlx-community-whisper-large-v3-turbo.auto.d1.p1.pyannote.pyannote-speaker-diarization-community-1.txt",
     "inline_mode": "full",
-    "transcript_full": "[00:00] Speaker 1: Good morning. Here is the full transcription of our discussion.\n[00:42] Speaker 2: Thank you.",
+    "transcript_full": "[00:00] [Speaker:0] Good morning. Here is the full transcription of our discussion.\n[00:42] [Speaker:1] Thank you.",
     "chars": 90,
     "lines": 2
   },
@@ -304,8 +307,8 @@ memos2txt diarizer uninstall
     "device": "mps",
     "speaker_count": 2,
     "speakers": [
-      { "id": "SPEAKER_00", "label": "Speaker 1", "turns": 1, "speech_seconds": 12.4 },
-      { "id": "SPEAKER_01", "label": "Speaker 2", "turns": 1, "speech_seconds": 4.1 }
+      { "id": "SPEAKER_00", "label": "Speaker 0", "turns": 1, "speech_seconds": 12.4 },
+      { "id": "SPEAKER_01", "label": "Speaker 1", "turns": 1, "speech_seconds": 4.1 }
     ],
     "seconds": 18.7
   },

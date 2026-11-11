@@ -8,8 +8,8 @@ func TestParseLocalProviderFlags(t *testing.T) {
 	cfg, res := Parse([]string{
 		"--provider", "mlx-whisper",
 		"--file", "/tmp/a.wav",
-		"--diarizer", "pyannote",
-		"--diarizer-device", "cpu",
+		"--diarization",
+		"--diarization-device", "cpu",
 		"--num-speakers", "2",
 		"--timestamps",
 		"--whisper-prompt", "ORRBSE",
@@ -17,7 +17,7 @@ func TestParseLocalProviderFlags(t *testing.T) {
 	if res != ParseResultOK {
 		t.Fatalf("result = %v (%s)", res, cfg.ParseError)
 	}
-	if cfg.Provider != "mlx-whisper" || cfg.Diarizer != "pyannote" || cfg.DiarizerDevice != "cpu" {
+	if cfg.Provider != "mlx-whisper" || !cfg.Diarization || !cfg.DiarizationSet || cfg.DiarizerDevice != "cpu" {
 		t.Fatalf("unexpected cfg: %+v", cfg)
 	}
 	if cfg.NumSpeakers != 2 || !cfg.Timestamps || cfg.WhisperPrompt != "ORRBSE" {

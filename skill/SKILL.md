@@ -32,7 +32,7 @@ $MEMOS2TXT --provider mlx-whisper --model mlx-community/whisper-large-v3-turbo-4
 
 # 4. Local speaker diarization (one-time setup)
 $MEMOS2TXT diarizer install
-$MEMOS2TXT --provider mlx-whisper --file "/path/to/meeting.m4a" --diarizer pyannote --json
+$MEMOS2TXT --provider mlx-whisper --file "/path/to/meeting.m4a" --diarization=true --json
 
 # 5. Force re-transcription (bypass cache)
 $MEMOS2TXT --provider groq --file "/path/to/audio.m4a" --no-cache --json
@@ -108,19 +108,21 @@ echo "$HF_TOKEN" | memos2txt auth huggingface --api-key-stdin
 
 # Transcribe + speaker labels
 memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
-  --diarizer pyannote --timestamps --json
+  --diarization=true --timestamps --json
 
-# Known speaker count / CPU fallback
+# Known speaker count / CPU fallback / plain transcription
 memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
-  --diarizer pyannote --num-speakers 3 --json
+  --diarization=true --num-speakers 3 --json
 memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
-  --diarizer pyannote --diarizer-device cpu --json
+  --diarization=true --diarization-device cpu --json
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
+  --diarization=false --json
 
 memos2txt diarizer status
 memos2txt diarizer uninstall
 ```
 
-Requirements: `mlx_whisper` (Homebrew), `ffmpeg`, `HF_TOKEN`, and ~1–2 GB for the managed pyannote environment. Pyannote runs locally; only model weights are downloaded from Hugging Face.
+Requirements: `mlx_whisper` (Homebrew), `ffmpeg`, `HF_TOKEN`, and ~1–2 GB for the managed pyannote environment. Pyannote runs locally; only model weights are downloaded from Hugging Face. When `--diarization` is omitted, it auto-enables if the runtime and token are ready; `--diarization=true` forces it and `--diarization=false` disables it.
 
 ---
 
@@ -176,8 +178,8 @@ When transcript length exceeds `--inline-max-chars` (default 4000), `transcript_
     "transcript_path": "/Users/user/.memos2txt/transcripts/<hash>.deepgram.nova-3.auto.d1.p1.txt",
     "inline_mode": "preview",
     "transcript_preview": [
-      "Speaker 0: Good morning everyone...",
-      "Speaker 1: Thanks for joining today's sprint review."
+      "[Speaker:0] Good morning everyone...",
+      "[Speaker:1] Thanks for joining today's sprint review."
     ],
     "chars": 45000,
     "lines": 350
@@ -205,6 +207,6 @@ If `ok` is `false`, inspect `error.code`:
 - `API_KEY_MISSING`: Set API key via `memos2txt auth <provider>` or environment variable. For local diarization, also accept the Hugging Face model terms.
 - `PROVIDER_ERROR`: Upstream cloud provider rejected request.
 - `LOCAL_DEPENDENCY_MISSING`: Install `mlx_whisper`, `ffmpeg`, or run `memos2txt diarizer install`.
-- `DIARIZATION_FAILED`: pyannote failed; retry with `--diarizer-device cpu` and inspect stderr.
+- `DIARIZATION_FAILED`: pyannote failed; retry with `--diarization-device cpu` and inspect stderr.
 - `TIMEOUT`: Request exceeded timeout limit (increase with `--timeout <seconds>`).
 - `INVALID_ARGS`: Missing required flags or invalid provider name.

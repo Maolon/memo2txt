@@ -77,7 +77,7 @@ func NormalizeToWAV(ctx context.Context, inputPath, outputPath string, opts Prep
 		return ProviderError{
 			Code:    schema.ErrLocalDependencyMissing,
 			Message: "ffmpeg not found (required for local diarization).",
-			Detail:  "Install ffmpeg, or run without --diarizer.",
+			Detail:  "Install ffmpeg, or run with --diarization=false.",
 		}
 	}
 

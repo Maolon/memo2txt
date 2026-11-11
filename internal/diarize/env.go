@@ -238,6 +238,12 @@ func runCommand(ctx context.Context, opts InstallOptions, name string, args ...s
 	return nil
 }
 
+// IsReady reports whether the managed diarization runtime is installed. It is
+// a fast marker check used to auto-enable local speaker labeling.
+func IsReady(cacheDir string) bool {
+	return EnvStatusFor(cacheDir).Installed
+}
+
 // EnsureInstalled returns a JSON-ready error when the diarization runtime is
 // missing. It does not import torch, so it stays fast on the hot path.
 func EnsureInstalled(cacheDir string) (EnvStatus, error) {

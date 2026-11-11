@@ -51,8 +51,7 @@ type Config struct {
 	PreprocessSampleRateHz int
 	KeepTemp               bool
 
-	// Local diarization (category=local provider, e.g. mlx-whisper).
-	Diarizer       string // auto | none | pyannote
+	// Local provider pipeline (mlx-whisper).
 	DiarizerModel  string
 	DiarizerDevice string
 	NumSpeakers    int
@@ -208,30 +207,37 @@ func runTranscribe(ctx context.Context, cfg Config) (schema.Response, error) {
 		model = providers.DefaultModel(provider)
 	}
 
-	diarizer, diarizerModel, dErr := resolveDiarizer(cfg, spec)
-	if dErr != nil {
-		return *dErr, nil
-	}
-	if diarizer != "" && diarizerModel == "" {
-		diarizerModel = diarize.DefaultModel
-	}
-
-	// Deepgram diarization support: default-enable unless explicitly set by user.
-	if provider == "deepgram" && diarizer == "" && !cfg.DiarizationSet {
-		opts.Diarization = true
-	}
-
-	if providers.IsLocal(provider) {
-		if cfg.ChunkSeconds > 0 {
-			return schema.ErrorResponse(schema.ErrInvalidArgs, "Chunking is not supported for local providers.", "mlx-whisper handles long audio internally; remove --chunk-seconds."), nil
-		}
-		opts.Diarization = diarizer != ""
-	}
-
 	cacheDir, err := defaultCacheDir()
 	if err != nil {
 		return schema.ErrorResponse(schema.ErrProviderError, "Failed to resolve cache dir.", err.Error()), nil
 	}
+
+	var diarizer, diarizerModel, localAutoHint string
+	if providers.IsLocal(provider) {
+		if cfg.ChunkSeconds > 0 {
+			return schema.ErrorResponse(schema.ErrInvalidArgs, "Chunking is not supported for local providers.", "mlx-whisper handles long audio internally; remove --chunk-seconds."), nil
+		}
+		enabled, modelOverride, hint, dErr := resolveLocalDiarization(cfg, cacheDir)
+		if dErr != nil {
+			return *dErr, nil
+		}
+		localAutoHint = hint
+		if enabled {
+			diarizer = "pyannote"
+			diarizerModel = modelOverride
+			opts.Diarization = true
+		} else {
+			opts.Diarization = false
+		}
+	} else {
+		// Cloud providers use their native diarization switch. Deepgram
+		// defaults to diarization unless the user explicitly disables it.
+		opts.Diarization = cfg.Diarization
+		if provider == "deepgram" && !cfg.DiarizationSet {
+			opts.Diarization = true
+		}
+	}
+
 	transcriptStore := cache.NewTranscriptStore(filepath.Join(cacheDir, "transcripts"))
 
 	hash, err := transcriptStore.HashFile(audioPath)
@@ -278,7 +284,7 @@ func runTranscribe(ctx context.Context, cfg Config) (schema.Response, error) {
 				Input:       &inputInfo,
 				Output:      &out,
 				Diarization: cachedDiarizationInfo(provider, diarizer, diarizerModel, opts.Diarization),
-				Note:        note,
+				Note:        joinNotes(note, localAutoHint),
 				Version:     Version,
 			}, nil
 		}
@@ -336,70 +342,59 @@ func runTranscribe(ctx context.Context, cfg Config) (schema.Response, error) {
 		Output:      &out,
 		Preprocess:  ppInfo,
 		Diarization: diarInfo,
-		Note:        note,
+		Note:        joinNotes(note, localAutoHint),
 		Version:     Version,
 	}, nil
 }
 
-func resolveDiarizer(cfg Config, spec providers.Spec) (string, string, *schema.Response) {
-	raw := strings.ToLower(strings.TrimSpace(cfg.Diarizer))
-	if raw == "" || raw == "auto" {
-		if cfg.Diarization {
-			raw = "pyannote"
-		} else {
-			raw = ""
-		}
+// resolveLocalDiarization decides whether the local provider pipeline includes
+// speaker labeling. When --diarization is omitted, local diarization is enabled
+// automatically if the managed pyannote runtime and required token are ready.
+func resolveLocalDiarization(cfg Config, cacheDir string) (bool, string, string, *schema.Response) {
+	if cfg.NumSpeakers < 0 || cfg.MinSpeakers < 0 || cfg.MaxSpeakers < 0 {
+		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Speaker counts must be positive.", "")
+		return false, "", "", &r
 	}
-	switch raw {
-	case "":
-		// no local diarization
-	case "none", "off", "false":
-		raw = ""
-	case "pyannote":
+	if cfg.NumSpeakers > 0 && (cfg.MinSpeakers > 0 || cfg.MaxSpeakers > 0) {
+		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Conflicting speaker counts.", "Use either --num-speakers or --min-speakers/--max-speakers, not both.")
+		return false, "", "", &r
+	}
+	if cfg.MinSpeakers > 0 && cfg.MaxSpeakers > 0 && cfg.MinSpeakers > cfg.MaxSpeakers {
+		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Invalid speaker range.", "--min-speakers must be <= --max-speakers.")
+		return false, "", "", &r
+	}
+	switch strings.ToLower(strings.TrimSpace(cfg.DiarizerDevice)) {
+	case "", "auto", "cpu", "mps", "cuda":
 	default:
-		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Unsupported diarizer.", "diarizer="+raw+" (supported: pyannote, none)")
-		return "", "", &r
-	}
-
-	if raw != "" && spec.Category != providers.CategoryLocal {
-		r := schema.ErrorResponse(
-			schema.ErrInvalidArgs,
-			"Local diarization requires a local ASR provider.",
-			"--diarizer pyannote works with --provider mlx-whisper. Cloud providers use provider-native diarization (--diarization).",
-		)
-		return "", "", &r
-	}
-	if raw != "" && cfg.DiarizationSet && !cfg.Diarization {
-		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Conflicting diarization flags.", "--diarization=false cannot be combined with --diarizer pyannote.")
-		return "", "", &r
-	}
-	if raw == "" {
-		return "", "", nil
+		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Unsupported diarization device.", "device="+cfg.DiarizerDevice+" (supported: auto, cpu, mps, cuda)")
+		return false, "", "", &r
 	}
 
 	model := strings.TrimSpace(cfg.DiarizerModel)
 	if model == "" {
 		model = diarize.DefaultModel
 	}
-	if cfg.NumSpeakers < 0 || cfg.MinSpeakers < 0 || cfg.MaxSpeakers < 0 {
-		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Speaker counts must be positive.", "")
-		return "", "", &r
+	needToken := !isLocalModelPath(model)
+	installed := diarize.IsReady(cacheDir)
+	tokenReady := !needToken || resolveHFToken(cfg) != ""
+
+	enabled := cfg.Diarization
+	hint := ""
+	if !cfg.DiarizationSet {
+		enabled = installed && tokenReady
+		if !enabled {
+			switch {
+			case !installed:
+				hint = "Local diarization auto-disabled: pyannote runtime is not installed. Run `memos2txt diarizer install` to enable speaker labels."
+			case !tokenReady:
+				hint = "Local diarization auto-disabled: HF_TOKEN is not configured. Run `echo \"$HF_TOKEN\" | memos2txt auth huggingface --api-key-stdin` to enable speaker labels."
+			}
+		}
 	}
-	if cfg.NumSpeakers > 0 && (cfg.MinSpeakers > 0 || cfg.MaxSpeakers > 0) {
-		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Conflicting speaker counts.", "Use either --num-speakers or --min-speakers/--max-speakers, not both.")
-		return "", "", &r
+	if !enabled {
+		return false, "", hint, nil
 	}
-	if cfg.MinSpeakers > 0 && cfg.MaxSpeakers > 0 && cfg.MinSpeakers > cfg.MaxSpeakers {
-		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Invalid speaker range.", "--min-speakers must be <= --max-speakers.")
-		return "", "", &r
-	}
-	switch strings.ToLower(strings.TrimSpace(cfg.DiarizerDevice)) {
-	case "", "auto", "cpu", "mps", "cuda":
-	default:
-		r := schema.ErrorResponse(schema.ErrInvalidArgs, "Unsupported diarizer device.", "device="+cfg.DiarizerDevice+" (supported: auto, cpu, mps, cuda)")
-		return "", "", &r
-	}
-	return raw, model, nil
+	return true, model, hint, nil
 }
 
 func transcribeCloud(
@@ -453,6 +448,9 @@ func transcribeCloud(
 	return text, nil, err
 }
 
+// transcribeLocal is the local provider pipeline. Like Deepgram's cloud
+// provider, it performs ASR and (when enabled) speaker diarization as one
+// operation and returns a single transcript artifact.
 func transcribeLocal(
 	ctx context.Context,
 	cfg Config,
@@ -957,6 +955,16 @@ func cleanupTemp(path string, keep bool) {
 	if !keep {
 		_ = os.RemoveAll(path)
 	}
+}
+
+func joinNotes(notes ...string) string {
+	parts := make([]string, 0, len(notes))
+	for _, note := range notes {
+		if strings.TrimSpace(note) != "" {
+			parts = append(parts, note)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func fileSizeBytes(path string) int64 {

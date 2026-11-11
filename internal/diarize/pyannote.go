@@ -145,7 +145,7 @@ func Run(ctx context.Context, audioPath string, opts Options) (*Result, error) {
 		case strings.Contains(lower, "out of memory") || strings.Contains(lower, "mps backend"):
 			return nil, schemaError(schema.ErrDiarizationFailed,
 				"Diarization failed on the selected device.",
-				"Retry with --diarizer-device cpu. Details: "+detail)
+				"Retry with --diarization-device cpu. Details: "+detail)
 		default:
 			return nil, schemaError(schema.ErrDiarizationFailed, "Speaker diarization failed.", detail)
 		}

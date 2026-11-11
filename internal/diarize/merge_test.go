@@ -24,16 +24,16 @@ func TestAssignSpeakersWordLevel(t *testing.T) {
 
 	utterances, speakers := AssignSpeakers(segments, turns, MergeOptions{})
 	want := []Utterance{
-		{Start: 0, End: 1.8, Speaker: "SPEAKER_00", Label: "Speaker 1", Text: "Hello there"},
-		{Start: 2.1, End: 3.2, Speaker: "SPEAKER_01", Label: "Speaker 2", Text: "General Kenobi"},
+		{Start: 0, End: 1.8, Speaker: "SPEAKER_00", SpeakerIndex: 0, Label: "Speaker 0", Text: "Hello there"},
+		{Start: 2.1, End: 3.2, Speaker: "SPEAKER_01", SpeakerIndex: 1, Label: "Speaker 1", Text: "General Kenobi"},
 	}
 	if !reflect.DeepEqual(utterances, want) {
 		t.Fatalf("utterances = %#v, want %#v", utterances, want)
 	}
-	if len(speakers) != 2 || speakers[0].Label != "Speaker 1" || speakers[1].Label != "Speaker 2" {
+	if len(speakers) != 2 || speakers[0].Label != "Speaker 0" || speakers[1].Label != "Speaker 1" {
 		t.Fatalf("speakers = %#v", speakers)
 	}
-	if got := Render(utterances, RenderOptions{}); got != "Speaker 1: Hello there\nSpeaker 2: General Kenobi" {
+	if got := Render(utterances, RenderOptions{}); got != "[Speaker:0] Hello there\n[Speaker:1] General Kenobi" {
 		t.Fatalf("render = %q", got)
 	}
 }
@@ -87,8 +87,8 @@ func TestAssignSpeakersSegmentLevelAndGapMerge(t *testing.T) {
 
 	utterances, _ := AssignSpeakers(segments, turns, MergeOptions{MergeGapSeconds: 1.0})
 	want := []Utterance{
-		{Start: 0.2, End: 1.9, Speaker: "A", Label: "Speaker 1", Text: "first second"},
-		{Start: 4.1, End: 5.0, Speaker: "B", Label: "Speaker 2", Text: "third"},
+		{Start: 0.2, End: 1.9, Speaker: "A", SpeakerIndex: 0, Label: "Speaker 0", Text: "first second"},
+		{Start: 4.1, End: 5.0, Speaker: "B", SpeakerIndex: 1, Label: "Speaker 1", Text: "third"},
 	}
 	if !reflect.DeepEqual(utterances, want) {
 		t.Fatalf("utterances = %#v, want %#v", utterances, want)

@@ -19,9 +19,11 @@ LOCAL SPEAKER DIARIZATION
   2) Accept the model terms and store a Hugging Face token:
        https://huggingface.co/pyannote/speaker-diarization-community-1
        echo "$HF_TOKEN" | memos2txt auth huggingface --api-key-stdin
-  3) Transcribe with speaker labels:
-       memos2txt --provider mlx-whisper --file meeting.m4a --diarizer pyannote --json
-       memos2txt --provider mlx-whisper --file meeting.m4a --diarizer pyannote --timestamps --json
+  3) Transcribe with speaker labels (one local provider pipeline):
+       memos2txt --provider mlx-whisper --file meeting.m4a --diarization=true --json
+       memos2txt --provider mlx-whisper --file meeting.m4a --diarization=true --timestamps --json
+     When --diarization is omitted, local diarization auto-enables if the runtime
+     and HF token are ready. Use --diarization=false for plain transcription.
 
 AUTHENTICATION COMMAND
   Set an API key / token for an adapter:
@@ -66,7 +68,7 @@ EXAMPLES
 
   Local with speakers:
     memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
-      --diarizer pyannote --num-speakers 3 --timestamps --json
+      --diarization=true --num-speakers 3 --timestamps --json
 
   Disable cache:
     memos2txt --provider mlx-whisper --file "/path/to/audio.m4a" --no-cache
@@ -81,13 +83,14 @@ FLAGS (selected)
                                   assemblyai=best, mlx-whisper=mlx-community/whisper-large-v3-turbo
     --language auto|en|zh|...
     --timeout <seconds>           Default 300; local providers default 3600
-    --diarization true|false      Deepgram defaults to true; local uses --diarizer
+    --diarization true|false      Local: ASR + pyannote labels as one pipeline (auto by default).
+                                  Deepgram defaults to true; cloud providers use native diarization.
     --punctuate true|false
 
   Local diarization (provider=mlx-whisper):
-    --diarizer auto|none|pyannote Default auto (pyannote when --diarization=true)
-    --diarizer-model <repo>       Default pyannote/speaker-diarization-community-1
-    --diarizer-device auto|cpu|mps|cuda
+    --diarization true|false      Auto-enabled when runtime + HF token are ready
+    --diarization-model <repo>    Default pyannote/speaker-diarization-community-1
+    --diarization-device auto|cpu|mps|cuda
     --num-speakers N              Exact speaker count (0 = infer)
     --min-speakers N              Minimum speakers (0 = infer)
     --max-speakers N              Maximum speakers (0 = infer)

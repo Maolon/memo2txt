@@ -53,7 +53,7 @@ memos2txt --provider mlx-whisper --file "/path/to/audio.m4a" --json
 memos2txt diarizer install
 # Accept terms: https://huggingface.co/pyannote/speaker-diarization-community-1
 echo "$HF_TOKEN" | memos2txt auth huggingface --api-key-stdin
-memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" --diarizer pyannote --json
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" --diarization=true --json
 ```
 
 Verify ready state:

@@ -31,15 +31,17 @@ type Turn struct {
 
 // Utterance is a merged, speaker-labeled transcript line.
 type Utterance struct {
-	Start   float64
-	End     float64
-	Speaker string // canonical id, e.g. SPEAKER_00
-	Label   string // human label, e.g. Speaker 1
-	Text    string
+	Start        float64
+	End          float64
+	Speaker      string // canonical id, e.g. SPEAKER_00
+	SpeakerIndex int    // 0-based index used in [Speaker:N]
+	Label        string // human label, e.g. Speaker 0
+	Text         string
 }
 
 type SpeakerSummary struct {
 	ID            string
+	Index         int
 	Label         string
 	Turns         int
 	SpeechSeconds float64
@@ -73,11 +75,14 @@ func AssignSpeakers(segments []Segment, turns []Turn, opts MergeOptions) ([]Utte
 	}
 
 	labelByID := make(map[string]string, len(normalized))
+	indexByID := make(map[string]int, len(normalized))
 	order := make([]string, 0, len(normalized))
 	for _, t := range normalized {
 		if _, ok := labelByID[t.Speaker]; !ok {
+			idx := len(order)
 			order = append(order, t.Speaker)
-			labelByID[t.Speaker] = fmt.Sprintf("Speaker %d", len(order))
+			indexByID[t.Speaker] = idx
+			labelByID[t.Speaker] = fmt.Sprintf("Speaker %d", idx)
 		}
 	}
 
@@ -104,13 +109,14 @@ func AssignSpeakers(segments []Segment, turns []Turn, opts MergeOptions) ([]Utte
 
 	utterances := groupUnits(units, opts.MergeGapSeconds)
 	for i := range utterances {
+		utterances[i].SpeakerIndex = indexByID[utterances[i].Speaker]
 		utterances[i].Label = labelByID[utterances[i].Speaker]
 		if utterances[i].Label == "" {
-			utterances[i].Label = "Speaker 1"
+			utterances[i].Label = "Speaker 0"
 		}
 	}
 
-	summaries := summarize(utterances, order, labelByID)
+	summaries := summarize(utterances, order, labelByID, indexByID)
 	return utterances, summaries
 }
 
@@ -266,15 +272,15 @@ func groupUnits(units []unit, mergeGap float64) []Utterance {
 	return out
 }
 
-func summarize(utterances []Utterance, order []string, labels map[string]string) []SpeakerSummary {
+func summarize(utterances []Utterance, order []string, labels map[string]string, indexes map[string]int) []SpeakerSummary {
 	byID := make(map[string]*SpeakerSummary, len(order))
 	for _, id := range order {
-		byID[id] = &SpeakerSummary{ID: id, Label: labels[id]}
+		byID[id] = &SpeakerSummary{ID: id, Index: indexes[id], Label: labels[id]}
 	}
 	for _, u := range utterances {
 		s, ok := byID[u.Speaker]
 		if !ok {
-			s = &SpeakerSummary{ID: u.Speaker, Label: u.Label}
+			s = &SpeakerSummary{ID: u.Speaker, Index: u.SpeakerIndex, Label: u.Label}
 			byID[u.Speaker] = s
 		}
 		s.Turns++
@@ -356,13 +362,7 @@ func Render(utterances []Utterance, opts RenderOptions) string {
 			b.WriteString(FormatTimestamp(u.Start))
 			b.WriteString("] ")
 		}
-		label := strings.TrimSpace(u.Label)
-		if label == "" {
-			label = u.Speaker
-		}
-		b.WriteString(label)
-		b.WriteString(": ")
-		b.WriteString(text)
+		fmt.Fprintf(&b, "[Speaker:%d] %s", u.SpeakerIndex, text)
 	}
 	return strings.TrimSpace(b.String())
 }
