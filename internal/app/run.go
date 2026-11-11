@@ -19,7 +19,7 @@ import (
 	"memos2txt/internal/secrets"
 )
 
-const Version = "0.2.0"
+const Version = "0.2.1"
 
 type Config struct {
 	File string

@@ -320,7 +320,7 @@ memos2txt diarizer uninstall
     ],
     "seconds": 18.7
   },
-  "version": "0.2.0"
+  "version": "0.2.1"
 }
 ```
 
@@ -346,7 +346,7 @@ memos2txt diarizer uninstall
   },
   "diarization": { "enabled": true, "diarizer": "deepgram", "model": "nova-3" },
   "note": "Transcript too long; read transcript_path for full text.",
-  "version": "0.2.0"
+  "version": "0.2.1"
 }
 ```
 
