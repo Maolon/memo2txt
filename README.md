@@ -198,7 +198,7 @@ memos2txt --provider mlx-whisper \
   --file meeting.m4a --json
 ```
 
-Models are cached by Hugging Face under `~/.cache/huggingface/hub/`. The first run downloads the weights; later runs are offline-capable.
+Models are cached by Hugging Face under `~/.cache/huggingface/hub/`. The first run downloads the weights; later runs are offline-capable. Quantized 4bit/8bit repos that ship `model.safetensors` are supported automatically: `memos2txt` adds a cache-local `weights.safetensors` alias for mlx-whisper 0.4.3.
 
 ---
 
