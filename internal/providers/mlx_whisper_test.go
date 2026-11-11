@@ -2,6 +2,8 @@ package providers
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -51,6 +53,45 @@ func TestSegmentsFromMLXFallbackText(t *testing.T) {
 func TestSegmentsFromMLXRejectsEmpty(t *testing.T) {
 	if _, err := segmentsFromMLX(mlxWhisperOutput{}); err == nil {
 		t.Fatal("expected error for empty transcript")
+	}
+}
+
+func TestEnsureMLXWeightsAlias(t *testing.T) {
+	hub := t.TempDir()
+	t.Setenv("HF_HUB_CACHE", hub)
+	snapshot := filepath.Join(hub, "models--org--model", "snapshots", "abc")
+	if err := os.MkdirAll(snapshot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, "model.safetensors"), []byte("weights"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := ensureMLXWeightsAlias("org/model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected alias to be created")
+	}
+	alias := filepath.Join(snapshot, "weights.safetensors")
+	if _, err := os.Stat(alias); err != nil {
+		t.Fatalf("alias missing: %v", err)
+	}
+	changed, err = ensureMLXWeightsAlias("org/model")
+	if err != nil || changed {
+		t.Fatalf("second call changed=%v err=%v, want false/nil", changed, err)
+	}
+}
+
+func TestEnsureMLXWeightsAliasLocalModel(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "model.safetensors"), []byte("weights"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := ensureMLXWeightsAlias(dir)
+	if err != nil || changed {
+		t.Fatalf("changed=%v err=%v, want false/nil", changed, err)
 	}
 }
 

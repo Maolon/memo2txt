@@ -98,6 +98,42 @@ func (c *MLXWhisperClient) TranscribeSegments(ctx context.Context, audioPath str
 	defer os.RemoveAll(outputDir)
 
 	const outputName = "transcript"
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		segments, detail, retryable, err := c.runOnce(ctx, bin, audioPath, opts, outputDir, outputName)
+		if err == nil {
+			return segments, nil
+		}
+		lastErr = err
+		if !retryable {
+			return nil, err
+		}
+		// mlx-whisper 0.4.3 only looks for weights.safetensors/weights.npz.
+		// Some 4bit/8bit MLX repos ship model.safetensors instead. Add a
+		// compatibility alias in the HF snapshot and retry once.
+		changed, aliasErr := ensureMLXWeightsAlias(c.opts.Model)
+		if aliasErr != nil {
+			return nil, ProviderError{
+				Code:    schema.ErrProviderError,
+				Message: "mlx_whisper model layout is incompatible.",
+				Detail:  aliasErr.Error() + " | " + detail,
+			}
+		}
+		if !changed {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
+
+func (c *MLXWhisperClient) runOnce(
+	ctx context.Context,
+	bin string,
+	audioPath string,
+	opts TranscribeOptions,
+	outputDir string,
+	outputName string,
+) ([]Segment, string, bool, error) {
 	args := []string{
 		audioPath,
 		"--model", c.opts.Model,
@@ -127,42 +163,129 @@ func (c *MLXWhisperClient) TranscribeSegments(ctx context.Context, audioPath str
 	runErr := cmd.Run()
 	if runErr != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return nil, ProviderError{Code: schema.ErrTimeout, Message: "Timed out.", Detail: ctx.Err().Error()}
+			return nil, "", false, ProviderError{Code: schema.ErrTimeout, Message: "Timed out.", Detail: ctx.Err().Error()}
 		}
 		if errors.Is(ctx.Err(), context.Canceled) {
-			return nil, ProviderError{Code: schema.ErrTimeout, Message: "Canceled.", Detail: ctx.Err().Error()}
+			return nil, "", false, ProviderError{Code: schema.ErrTimeout, Message: "Canceled.", Detail: ctx.Err().Error()}
 		}
-		detail := strings.TrimSpace(stderr.String())
-		if detail == "" {
-			detail = strings.TrimSpace(stdout.String())
-		}
-		if len(detail) > 4000 {
-			detail = detail[len(detail)-4000:]
-		}
+		detail := commandDetail(stdout.String(), stderr.String())
 		code := schema.ErrProviderError
 		msg := "mlx_whisper failed."
 		lower := strings.ToLower(detail)
 		if strings.Contains(lower, "no such file") || strings.Contains(lower, "not found") {
 			msg = "mlx_whisper could not load the audio or model."
 		}
-		return nil, ProviderError{Code: code, Message: msg, Detail: detail}
+		return nil, detail, false, ProviderError{Code: code, Message: msg, Detail: detail}
 	}
 
 	jsonPath := filepath.Join(outputDir, outputName+".json")
 	b, err := os.ReadFile(jsonPath)
 	if err != nil {
-		return nil, ProviderError{
+		detail := commandDetail(stdout.String(), stderr.String())
+		if detail == "" {
+			detail = err.Error()
+		} else {
+			detail += " | " + err.Error()
+		}
+		return nil, detail, true, ProviderError{
 			Code:    schema.ErrProviderError,
 			Message: "mlx_whisper did not produce JSON output.",
-			Detail:  err.Error(),
+			Detail:  detail,
 		}
 	}
 
 	var parsed mlxWhisperOutput
 	if err := json.Unmarshal(b, &parsed); err != nil {
-		return nil, ProviderError{Code: schema.ErrProviderError, Message: "Failed to parse mlx_whisper JSON.", Detail: err.Error()}
+		return nil, "", false, ProviderError{Code: schema.ErrProviderError, Message: "Failed to parse mlx_whisper JSON.", Detail: err.Error()}
 	}
-	return segmentsFromMLX(parsed)
+	segments, err := segmentsFromMLX(parsed)
+	return segments, "", false, err
+}
+
+func commandDetail(stdout, stderr string) string {
+	detail := strings.TrimSpace(stderr)
+	if detail == "" {
+		detail = strings.TrimSpace(stdout)
+	}
+	if len(detail) > 4000 {
+		detail = detail[len(detail)-4000:]
+	}
+	return detail
+}
+
+// ensureMLXWeightsAlias adds a weights.safetensors symlink next to
+// model.safetensors for mlx-whisper 0.4.3, which only understands the older
+// weight filename. It returns true when at least one alias was created.
+func ensureMLXWeightsAlias(model string) (bool, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return false, nil
+	}
+	if _, err := os.Stat(model); err == nil {
+		return false, nil // local model directory
+	}
+	if strings.HasPrefix(model, ".") || strings.HasPrefix(model, "/") || strings.HasPrefix(model, "~") {
+		return false, nil
+	}
+	repo := strings.SplitN(model, "@", 2)[0]
+	dirName := "models--" + strings.ReplaceAll(repo, "/", "--")
+
+	changed := false
+	for _, hubDir := range hfHubCacheDirs() {
+		snapshots := filepath.Join(hubDir, dirName, "snapshots")
+		entries, err := os.ReadDir(snapshots)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			dir := filepath.Join(snapshots, entry.Name())
+			if _, err := os.Stat(filepath.Join(dir, "model.safetensors")); err != nil {
+				continue
+			}
+			alias := filepath.Join(dir, "weights.safetensors")
+			if _, err := os.Stat(alias); err == nil {
+				continue
+			}
+			// Remove a broken symlink before recreating it.
+			if _, err := os.Lstat(alias); err == nil {
+				_ = os.Remove(alias)
+			}
+			if err := os.Symlink("model.safetensors", alias); err != nil {
+				return changed, err
+			}
+			changed = true
+		}
+	}
+	return changed, nil
+}
+
+func hfHubCacheDirs() []string {
+	var dirs []string
+	if v := strings.TrimSpace(os.Getenv("HF_HUB_CACHE")); v != "" {
+		dirs = append(dirs, v)
+	}
+	if v := strings.TrimSpace(os.Getenv("HF_HOME")); v != "" {
+		dirs = append(dirs, filepath.Join(v, "hub"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs,
+			filepath.Join(home, ".cache", "huggingface", "hub"),
+			filepath.Join(home, "Library", "Caches", "huggingface", "hub"),
+		)
+	}
+	seen := make(map[string]bool, len(dirs))
+	out := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		if dir == "" || seen[dir] {
+			continue
+		}
+		seen[dir] = true
+		out = append(out, dir)
+	}
+	return out
 }
 
 func segmentsFromMLX(parsed mlxWhisperOutput) ([]Segment, error) {
