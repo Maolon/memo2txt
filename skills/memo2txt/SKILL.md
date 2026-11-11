@@ -122,7 +122,7 @@ memos2txt diarizer status
 memos2txt diarizer uninstall
 ```
 
-Requirements: `mlx_whisper` (Homebrew), `ffmpeg`, `HF_TOKEN`, and ~1–2 GB for the managed pyannote environment. Pyannote runs locally; only model weights are downloaded from Hugging Face. When `--diarization` is omitted, it auto-enables if the runtime and token are ready; `--diarization=true` forces it and `--diarization=false` disables it.
+Requirements: `mlx_whisper` (Homebrew), `ffmpeg`, and ~1–2 GB for the managed pyannote environment. The official `pyannote/speaker-diarization-community-1` is gated and needs `HF_TOKEN`; the ungated `pyannote-community/speaker-diarization-community-1` mirror can run without a token via `--diarization-model`. When `--diarization` is omitted, it auto-enables if the runtime and token are ready; `--diarization=true` forces it and `--diarization=false` disables it.
 
 ---
 

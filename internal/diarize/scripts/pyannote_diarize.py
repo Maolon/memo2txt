@@ -102,14 +102,8 @@ def main() -> None:
         or ""
     ).strip()
 
-    model_path = os.path.expanduser(args.model)
-    is_local_model = os.path.isdir(model_path) or os.path.isfile(model_path)
-
-    if not token and not is_local_model:
-        fail(
-            "missing Hugging Face token. Accept the model terms and run "
-            "`memos2txt auth huggingface --api-key-stdin` or set HF_TOKEN."
-        )
+    if not token:
+        log("no HF token configured; trying anonymous access (ungated models only)")
 
     if not os.path.isfile(args.audio):
         fail(f"audio file not found: {args.audio}")

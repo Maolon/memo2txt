@@ -54,7 +54,15 @@ memos2txt --provider mlx-whisper --file meeting.m4a --diarization=true --json
 * Assigns speakers from word-level Whisper timestamps with overlap-aware turns and short-run smoothing.
 * Outputs Deepgram-compatible `[Speaker:N]` labels plus a deterministic `diarization` block with speaker counts and speech seconds.
 * When `--diarization` is omitted, local diarization auto-enables if the runtime and HF token are ready; otherwise local transcription runs plain with an explanatory note. Use `--diarization=false` to force plain transcription.
-* Requires `HF_TOKEN` (model is gated) and `ffmpeg`. Accept the model terms on Hugging Face first.
+* Requires `HF_TOKEN` for the official gated model (`pyannote/speaker-diarization-community-1`) and `ffmpeg`. The ungated `pyannote-community/speaker-diarization-community-1` mirror runs without a token.
+
+Tokenless option using the ungated mirror:
+```bash
+memos2txt --provider mlx-whisper --file meeting.m4a \
+  --diarization=true \
+  --diarization-model pyannote-community/speaker-diarization-community-1 \
+  --json
+```
 
 ### 3. ⚡ Deterministic Content-Hash Caching
 Never pay for or wait on duplicate transcriptions:

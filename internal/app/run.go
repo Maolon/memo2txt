@@ -515,16 +515,6 @@ func transcribeLocal(
 		return text, pp, nil, err
 	}
 
-	hfToken := resolveHFToken(cfg)
-	if hfToken == "" && !isLocalModelPath(diarizerModel) {
-		return "", nil, nil, providers.ProviderError{
-			Code:    schema.ErrAPIKeyMissing,
-			Message: "Missing Hugging Face token for the diarization model.",
-			Detail: "Accept the terms at https://huggingface.co/" + diarizerModel +
-				" and run: echo \"$HF_TOKEN\" | memos2txt auth huggingface --api-key-stdin",
-		}
-	}
-
 	tmpDir := filepath.Join(cacheDir, "tmp", key.SHA256+"-local")
 	wavPath := filepath.Join(tmpDir, "audio.wav")
 	defer cleanupTemp(tmpDir, cfg.KeepTemp)
@@ -549,7 +539,7 @@ func transcribeLocal(
 	dres, err := diarize.Run(ctx, wavPath, diarize.Options{
 		Model:       diarizerModel,
 		Device:      cfg.DiarizerDevice,
-		HFTOKEN:     hfToken,
+		HFTOKEN:     resolveHFToken(cfg),
 		NumSpeakers: cfg.NumSpeakers,
 		MinSpeakers: cfg.MinSpeakers,
 		MaxSpeakers: cfg.MaxSpeakers,
