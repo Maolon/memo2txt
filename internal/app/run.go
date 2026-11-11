@@ -376,7 +376,10 @@ func resolveLocalDiarization(cfg Config, cacheDir string) (bool, string, string,
 	}
 	needToken := !isLocalModelPath(model)
 	installed := diarize.IsReady(cacheDir)
-	tokenReady := !needToken || resolveHFToken(cfg) != ""
+	tokenReady := !needToken
+	if installed && needToken {
+		tokenReady = resolveHFToken(cfg) != ""
+	}
 
 	enabled := cfg.Diarization
 	hint := ""
