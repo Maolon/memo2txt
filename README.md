@@ -8,7 +8,9 @@
 [![Output](https://img.shields.io/badge/stdout-JSON_only-green.svg)](#-output-contract)
 [![Cache](https://img.shields.io/badge/cache-SHA256_content_hash-orange.svg)](#-content-hash-caching)
 
-**Audio Files → Cloud ASR (Groq / Deepgram / AssemblyAI) → Deterministic JSON Transcript**
+**Audio Files → Cloud or Local ASR → Deterministic JSON Transcript**
+
+**Cloud:** Groq / Deepgram / AssemblyAI · **Local:** mlx-whisper (Apple Silicon) + pyannote speaker diarization
 
 [Key Features](#-key-features) • [Performance](#-measured-performance) • [Why memos2txt](#️-why-memos2txt) • [Quickstart](#-quickstart) • [Authentication](#-authentication) • [Output Contract](#-output-contract) • [Commands](#️-command-reference)
 
@@ -33,32 +35,47 @@
 
 ## 🌟 Key Features
 
-### 1. 🎙️ Multi-Provider Cloud ASR Integration
-Connect local `.m4a`, `.caf`, `.mp3`, and `.wav` audio files directly to industry-leading cloud speech-to-text models:
-* **Groq Whisper (`whisper-large-v3`)**: Ultra-fast, cost-effective transcription.
-* **Deepgram (`nova-3`)**: Production-grade speech recognition with **speaker diarization** and **smart formatting** enabled by default.
-* **AssemblyAI (`best`)**: High-accuracy transcription with automated punctuation and speaker labeling.
+### 1. 🎙️ Multi-Provider ASR: Cloud + Local
+Connect local `.m4a`, `.caf`, `.mp3`, and `.wav` audio files directly to industry-leading speech-to-text models:
+* **Groq Whisper (`whisper-large-v3`)** — Cloud. Ultra-fast, cost-effective transcription.
+* **Deepgram (`nova-3`)** — Cloud. Production-grade recognition with **speaker diarization** and smart formatting.
+* **AssemblyAI (`best`)** — Cloud. High-accuracy transcription with automated punctuation and speaker labeling.
+* **mlx-whisper** — **Local category, Apple Silicon.** Runs Whisper locally through MLX, no audio leaves the machine. Uses word timestamps for downstream speaker assignment.
 
-### 2. ⚡ Deterministic Content-Hash Caching
+Provider taxonomy is explicit: `option.category` is `"cloud"` or `"local"`; the provider id for local ASR is `mlx-whisper` (not `local`).
+
+### 2. 🗣️ Local Speaker Diarization (pyannote community-1)
+Run the full local labeling pipeline — no cloud ASR and no cloud diarization:
+```bash
+memos2txt diarizer install
+memos2txt --provider mlx-whisper --file meeting.m4a --diarizer pyannote --json
+```
+* Uses `pyannote/speaker-diarization-community-1` in a managed Python environment (`~/.memos2txt/envs/pyannote`).
+* Assigns speakers from word-level Whisper timestamps with overlap-aware turns and short-run smoothing.
+* Outputs `Speaker 1:`-style labels plus a deterministic `diarization` block with speaker counts and speech seconds.
+* Requires `HF_TOKEN` (model is gated) and `ffmpeg`. Accept the model terms on Hugging Face first.
+
+### 3. ⚡ Deterministic Content-Hash Caching
 Never pay for or wait on duplicate transcriptions:
-* Keyed by `sha256(audio_bytes) + provider + model + language + diarization + punctuate`.
+* Keyed by `sha256(audio_bytes) + provider + model + language + diarization + punctuate + diarizer + diarizer_model`.
 * Survives file renames and moves.
 * Caches stored in `~/.memos2txt/transcripts/` with strict `0600` file permissions.
 
-### 3. ✂️ Smart Audio Preprocessing & Adaptive Chunking
+### 4. ✂️ Smart Audio Preprocessing & Adaptive Chunking
 Transparently overcomes provider upload size limits and timeout constraints:
 * **Auto-Probing**: Automatically checks audio duration via `ffprobe`.
 * **Adaptive Chunking**: Files exceeding 1 hour (3600s) or triggering HTTP 413 are automatically normalized to 16kHz mono MP3 via `ffmpeg`, split into 600s chunks, transcribed sequentially, and merged.
 
-### 4. 🤖 Agent-First JSON-Only Contract
+### 5. 🤖 Agent-First JSON-Only Contract
 Designed from the ground up for LLM coding agents (Claude Code, Cursor, Codex, Pi) and shell pipelines:
 * **stdout is 100% JSON**: Success and error payloads both emit standard JSON objects.
 * **stderr for Diagnostics**: Human-facing progress, prompts, and debug logs are routed strictly to stderr.
 * **Inline vs. Preview Policy**: Automatically inlines full transcript for short audio (`inline_mode: "full"`), and yields line previews plus file path for long audio (`inline_mode: "preview"`) to prevent agent context overflow.
 
-### 5. 🔑 Unified Multi-Platform Authentication (`auth <adapter>`)
+### 6. 🔑 Unified Multi-Platform Authentication (`auth <adapter>`)
 * Secure native credential storage: macOS **Keychain**, Windows **Credential Manager**, and Linux configuration file (`~/.memos2txt/config.json`).
-* Seamless fallback to environment variables (`GROQ_API_KEY`, `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`).
+* Seamless fallback to environment variables (`GROQ_API_KEY`, `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`, `HF_TOKEN`).
+* Hugging Face is a model-hub adapter (`memos2txt auth huggingface`) used by local diarization.
 
 ---
 
@@ -66,11 +83,13 @@ Designed from the ground up for LLM coding agents (Claude Code, Cursor, Codex, P
 
 | Feature | Local Whisper (`whisper.cpp` / MLX) | Python Scripts (`openai-whisper`) | Cloud Web Consoles | memos2txt |
 | --- | --- | --- | --- | --- |
-| **System Overhead** | Heavy GPU/RAM usage, slow on CPU | Huge Python / PyTorch dependencies | Manual drag-and-drop | ✅ **Lightweight (~2.4MB archive / ~6MB binary)** |
+| **Cloud footprint** | n/a | n/a | Manual drag-and-drop | ✅ **Lightweight (~2.4MB archive / ~6MB binary)** |
+| **Local privacy** | Audio stays local | Audio stays local | Audio uploaded | ✅ **`mlx-whisper` + pyannote stay local** |
 | **Agent Friendly** | Mixed stdout logs and stderr noise | Unstable stdout formatting | No terminal / CLI interface | ✅ **Deterministic stdout JSON only** |
 | **Deduplication** | Manual caching logic needed | Re-transcribes every run | No automated caching | ✅ **Automatic SHA256 content cache** |
-| **Large Audio Handling** | Out-of-memory crashes on long audio | Complex chunking boilerplate | Hard file size ceilings | ✅ **Automated probe & ffmpeg chunking** |
-| **Multi-Provider** | Locked to Whisper weights | Separate SDKs for each vendor | Fragmented web consoles | ✅ **Groq + Deepgram + AssemblyAI unified** |
+| **Large Audio Handling** | Manual chunking | Complex chunking boilerplate | Hard file size ceilings | ✅ **Automated probe & ffmpeg chunking (cloud)** |
+| **Multi-Provider** | Locked to Whisper weights | Separate SDKs for each vendor | Fragmented web consoles | ✅ **Groq + Deepgram + AssemblyAI + mlx-whisper unified** |
+| **Speaker labels** | Not built in | Manual pyannote assembly | Varies by vendor | ✅ **Deepgram native + local pyannote community-1** |
 
 ---
 
@@ -116,17 +135,66 @@ go install github.com/Maolon/memo2txt/cmd/memos2txt@latest
 ### 🔑 Configure Credentials & Run
 
 ```bash
-# 1. Store your API key into native Keychain / Credential Manager
+# Cloud: store API keys in native Keychain / Credential Manager
 echo "gsk_your_groq_key" | memos2txt auth groq --api-key-stdin
 echo "your_deepgram_key" | memos2txt auth deepgram --api-key-stdin
 
-# 2. Check configuration status
+# Check configuration status
 memos2txt auth --list
 
-# 3. Transcribe an Audio File
+# Cloud transcription
 memos2txt --provider groq --file "/path/to/meeting.m4a" --json
 memos2txt --provider deepgram --file "/path/to/interview.m4a" --json
+
+# Local transcription (Apple Silicon)
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" --json
 ```
+
+### 🗣️ Local Speaker Labeling (one-time setup)
+
+```bash
+# 1. Install the managed pyannote environment (downloads torch + pyannote)
+memos2txt diarizer install
+
+# 2. Accept terms at https://huggingface.co/pyannote/speaker-diarization-community-1
+#    then store the token inside the OS credential store
+echo "$HF_TOKEN" | memos2txt auth huggingface --api-key-stdin
+
+# 3. Transcribe + diarize, fully local
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" --diarizer pyannote --json
+
+# Optional: timestamps, known speaker count, CPU-only
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
+  --diarizer pyannote --num-speakers 3 --timestamps --json
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
+  --diarizer pyannote --diarizer-device cpu --json
+
+# Runtime status / removal
+memos2txt diarizer status
+memos2txt diarizer uninstall
+```
+
+### 🧠 MLX Whisper Model Options (large-v3-turbo variants)
+
+Yes — `whisper-large-v3-turbo` has MLX conversions maintained by `mlx-community`. `memos2txt` accepts any MLX repo id or local model directory through `--model`:
+
+| MLX repo | Approx. weights | Recommended when |
+| --- | --- | --- |
+| `mlx-community/whisper-large-v3-turbo` | ~1.61 GB (fp16) | Default. Best accuracy, enough disk. |
+| `mlx-community/whisper-large-v3-turbo-8bit` | ~863 MB | Balanced disk/accuracy. |
+| `mlx-community/whisper-large-v3-turbo-4bit` | ~463 MB | Low disk / laptop-friendly. |
+| `mlx-community/whisper-large-v3-turbo-asr-fp16` | ~1.61 GB | ASR-focused conversion. |
+| `mlx-community/whisper-large-v3-turbo-asr-4bit` | ~463 MB | ASR-focused + low disk. |
+| `mlx-community/belle-whisper-large-v3-turbo-zh-8bit` | ~863 MB | Chinese fine-tune. |
+
+```bash
+# Low-disk variant (~463 MB instead of ~1.6 GB)
+memos2txt --provider mlx-whisper \
+  --model mlx-community/whisper-large-v3-turbo-4bit \
+  --file meeting.m4a --json
+```
+
+Models are cached by Hugging Face under `~/.cache/huggingface/hub/`. The first run downloads the weights; later runs are offline-capable.
 
 ---
 
@@ -139,9 +207,11 @@ memos2txt --provider deepgram --file "/path/to/interview.m4a" --json
 memos2txt auth groq
 memos2txt auth deepgram
 memos2txt auth assemblyai
+memos2txt auth huggingface   # HF_TOKEN for gated pyannote models
 
 # Non-interactive / CI setup
 echo "$GROQ_API_KEY" | memos2txt auth groq --api-key-stdin
+echo "$HF_TOKEN" | memos2txt auth huggingface --api-key-stdin
 
 # List authentication status across all adapters
 memos2txt auth --list
@@ -153,23 +223,45 @@ memos2txt auth groq --unset
 ### Transcription Flags
 
 ```bash
-memos2txt --provider <groq|deepgram|assemblyai> --file <path> [flags]
+memos2txt --provider <groq|deepgram|assemblyai|mlx-whisper> --file <path> [flags]
 ```
+
+| Category | Provider id | Where it runs | Default model |
+| --- | --- | --- | --- |
+| cloud | `groq` | Groq API | `whisper-large-v3` |
+| cloud | `deepgram` | Deepgram API | `nova-3` |
+| cloud | `assemblyai` | AssemblyAI API | `best` |
+| local | `mlx-whisper` | Apple Silicon (MLX) | `mlx-community/whisper-large-v3-turbo` |
 
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--file <path>` | *(required)* | Path to local audio file (`.m4a`, `.caf`, `.mp3`, `.wav`). |
-| `--provider <name>` | *(required)* | Cloud provider: `groq`, `deepgram`, or `assemblyai`. |
-| `--model <string>` | Provider default | Model override (`whisper-large-v3`, `nova-3`, `best`). |
+| `--provider <id>` | *(required)* | Cloud: `groq`, `deepgram`, `assemblyai`. Local: `mlx-whisper`. |
+| `--model <string>` | Provider default | Model override (cloud model id or MLX HF repo / local path). |
 | `--language <string>` | `auto` | Language hint (`en`, `zh`, `es`, etc.). |
-| `--diarization` | `true` *(Deepgram)* | Enable speaker diarization and speaker labeling. |
+| `--diarization` | `true` *(Deepgram)* | Provider-native diarization for cloud providers. |
+| `--diarizer <name>` | `auto` | Local diarization backend: `pyannote`, `none`, `auto`. |
+| `--diarizer-model <repo>` | `pyannote/speaker-diarization-community-1` | pyannote pipeline override. |
+| `--diarizer-device <dev>` | `auto` | `auto`, `cpu`, `mps`, or `cuda`. GPU falls back to CPU on failure. |
+| `--num-speakers N` | `0` *(infer)* | Exact speaker count. |
+| `--min-speakers N` / `--max-speakers N` | `0` | Speaker count bounds. |
+| `--timestamps` | `false` | Prefix diarized lines with `[MM:SS]`. |
+| `--whisper-prompt <text>` | *(empty)* | Initial prompt for names/jargon (local Whisper). |
 | `--punctuate` | `true` | Enable smart punctuation and formatting. |
 | `--no-cache` | `false` | Force re-transcription by bypassing disk cache. |
 | `--inline-max-chars N` | `4000` | Inline full text if chars <= N; otherwise return preview. |
 | `--preview-lines N` | `5` | Number of preview lines returned when transcript is long. |
-| `--auto-preprocess` | `true` | Normalize audio to 16kHz mono MP3 via ffmpeg if >25MB. |
-| `--chunk-seconds N` | `0` *(auto)* | `0` = auto-probe duration (chunks if >1h); `>0` forces chunk slice. |
-| `--timeout <sec>` | `300` | HTTP request timeout in seconds. |
+| `--auto-preprocess` | `true` | Cloud only. Normalize audio via ffmpeg if >25MB. |
+| `--chunk-seconds N` | `0` *(auto)* | Cloud only. `0` = auto-probe; `>0` forces chunking. |
+| `--timeout <sec>` | `300` (`3600` local) | Request/run timeout in seconds. |
+
+### Diarizer Runtime Commands
+
+```bash
+memos2txt diarizer install [--python 3.12] [--force]
+memos2txt diarizer status
+memos2txt diarizer uninstall
+```
 
 ---
 
@@ -181,12 +273,17 @@ memos2txt --provider <groq|deepgram|assemblyai> --file <path> [flags]
 {
   "ok": true,
   "cache_hit": false,
-  "provider": "groq",
-  "model": "whisper-large-v3",
+  "category": "local",
+  "provider": "mlx-whisper",
+  "model": "mlx-community/whisper-large-v3-turbo",
   "mode": "transcribe",
   "options": {
     "language": "auto",
-    "punctuate": true
+    "punctuate": true,
+    "diarization": true,
+    "diarizer": "pyannote",
+    "diarizer_model": "pyannote/speaker-diarization-community-1",
+    "timestamps": true
   },
   "input": {
     "file_path": "/path/to/audio.m4a",
@@ -194,13 +291,25 @@ memos2txt --provider <groq|deepgram|assemblyai> --file <path> [flags]
     "mtime_unix": 1700000000
   },
   "output": {
-    "transcript_path": "/Users/user/.memos2txt/transcripts/abc123hash.groq.whisper-large-v3.auto.d0.p1.txt",
+    "transcript_path": "/Users/user/.memos2txt/transcripts/abc123hash.mlx-whisper.mlx-community-whisper-large-v3-turbo.auto.d1.p1.pyannote.pyannote-speaker-diarization-community-1.txt",
     "inline_mode": "full",
-    "transcript_full": "Good morning. Here is the full transcription of our discussion.",
-    "chars": 62,
-    "lines": 1
+    "transcript_full": "[00:00] Speaker 1: Good morning. Here is the full transcription of our discussion.\n[00:42] Speaker 2: Thank you.",
+    "chars": 90,
+    "lines": 2
   },
-  "version": "0.1.0"
+  "diarization": {
+    "enabled": true,
+    "diarizer": "pyannote",
+    "model": "pyannote/speaker-diarization-community-1",
+    "device": "mps",
+    "speaker_count": 2,
+    "speakers": [
+      { "id": "SPEAKER_00", "label": "Speaker 1", "turns": 1, "speech_seconds": 12.4 },
+      { "id": "SPEAKER_01", "label": "Speaker 2", "turns": 1, "speech_seconds": 4.1 }
+    ],
+    "seconds": 18.7
+  },
+  "version": "0.2.0"
 }
 ```
 
@@ -210,20 +319,23 @@ memos2txt --provider <groq|deepgram|assemblyai> --file <path> [flags]
 {
   "ok": true,
   "cache_hit": true,
+  "category": "cloud",
   "provider": "deepgram",
   "model": "nova-3",
+  "options": { "language": "auto", "diarization": true, "punctuate": true },
   "output": {
     "transcript_path": "/Users/user/.memos2txt/transcripts/xyz987hash.deepgram.nova-3.auto.d1.p1.txt",
     "inline_mode": "preview",
     "transcript_preview": [
-      "Speaker 0: Welcome to the quarterly financial review.",
-      "Speaker 1: Thank you. Let's start with revenue numbers..."
+      "[Speaker:0] Welcome to the quarterly financial review.",
+      "[Speaker:1] Thank you. Let's start with revenue numbers..."
     ],
     "chars": 52000,
     "lines": 420
   },
+  "diarization": { "enabled": true, "diarizer": "deepgram", "model": "nova-3" },
   "note": "Transcript too long; read transcript_path for full text.",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }
 ```
 
@@ -246,10 +358,12 @@ memos2txt --provider <groq|deepgram|assemblyai> --file <path> [flags]
 
 ## 💻 Cross-Platform Support
 
-`memos2txt` is written in pure Go (`CGO_ENABLED=0`) and natively supports:
-* **macOS** (`darwin/arm64`, `darwin/amd64`): Native Apple Keychain integration.
-* **Windows** (`windows/amd64`, `windows/arm64`): Native Windows Credential Manager integration.
-* **Linux** (`linux/amd64`, `linux/arm64`): Config store at `~/.memos2txt/config.json`.
+`memos2txt` is written in pure Go (`CGO_ENABLED=0`) and natively runs on:
+* **macOS** (`darwin/arm64`, `darwin/amd64`): Native Apple Keychain integration. Local ASR (`mlx-whisper`) requires **Apple Silicon**; local diarization also works on Intel macOS.
+* **Windows** (`windows/amd64`, `windows/arm64`): Native Windows Credential Manager integration. Cloud providers only.
+* **Linux** (`linux/amd64`, `linux/arm64`): Config store at `~/.memos2txt/config.json`. Cloud providers; local diarization works when the managed pyannote environment is installed.
+
+Local diarization depends on external runtimes: `ffmpeg`, `uv` (recommended) or Python 3.12+, and `mlx_whisper` for local ASR. These are never bundled into the static binary.
 
 ---
 

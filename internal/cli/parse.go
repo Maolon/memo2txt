@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"memos2txt/internal/app"
+	"memos2txt/internal/providers"
 )
 
 type ParseResult int
@@ -21,6 +22,9 @@ func Parse(args []string) (app.Config, ParseResult) {
 	if len(args) > 0 && args[0] == "auth" {
 		return parseAuth(args[1:])
 	}
+	if len(args) > 0 && args[0] == "diarizer" {
+		return parseDiarizer(args[1:])
+	}
 
 	var cfg app.Config
 
@@ -33,12 +37,21 @@ func Parse(args []string) (app.Config, ParseResult) {
 
 	fs.StringVar(&cfg.File, "file", "", "Direct audio file path to transcribe (required).")
 
-	fs.StringVar(&cfg.Provider, "provider", "", "Transcription provider: groq|deepgram|assemblyai.")
-	fs.StringVar(&cfg.Model, "model", "", "Provider model (optional). Defaults: groq=whisper-large-v3, deepgram=nova-3, assemblyai=best.")
+	fs.StringVar(&cfg.Provider, "provider", "", "Transcription provider. Cloud: groq|deepgram|assemblyai. Local: mlx-whisper.")
+	fs.StringVar(&cfg.Model, "model", "", "Provider model (optional). Defaults: groq=whisper-large-v3, deepgram=nova-3, assemblyai=best, mlx-whisper=mlx-community/whisper-large-v3-turbo.")
 	fs.StringVar(&cfg.Language, "language", "auto", "Language hint (auto|en|zh|...). 'auto' omits the hint.")
-	fs.IntVar(&cfg.TimeoutSeconds, "timeout", 300, "Timeout in seconds (default 300).")
-	fs.Var(&boolWithSetFlag{Value: &cfg.Diarization, WasSet: &cfg.DiarizationSet}, "diarization", "Request diarization if supported. For deepgram defaults to true unless explicitly set.")
+	fs.Var(&intWithSetFlag{Value: &cfg.TimeoutSeconds, WasSet: &cfg.TimeoutSet}, "timeout", "Timeout in seconds (default 300; 3600 for local providers).")
+	fs.Var(&boolWithSetFlag{Value: &cfg.Diarization, WasSet: &cfg.DiarizationSet}, "diarization", "Request speaker diarization. Local providers use --diarizer; deepgram defaults to true.")
 	fs.BoolVar(&cfg.Punctuate, "punctuate", true, "Request punctuation if supported (default true).")
+
+	fs.StringVar(&cfg.Diarizer, "diarizer", "auto", "Local diarization backend: auto|none|pyannote. auto enables pyannote when --diarization=true.")
+	fs.StringVar(&cfg.DiarizerModel, "diarizer-model", "", "pyannote pipeline model (default pyannote/speaker-diarization-community-1).")
+	fs.StringVar(&cfg.DiarizerDevice, "diarizer-device", "auto", "Diarization device: auto|cpu|mps|cuda.")
+	fs.IntVar(&cfg.NumSpeakers, "num-speakers", 0, "Exact number of speakers (0 = infer).")
+	fs.IntVar(&cfg.MinSpeakers, "min-speakers", 0, "Minimum number of speakers (0 = infer).")
+	fs.IntVar(&cfg.MaxSpeakers, "max-speakers", 0, "Maximum number of speakers (0 = infer).")
+	fs.BoolVar(&cfg.Timestamps, "timestamps", false, "Prefix diarized lines with [MM:SS] timestamps.")
+	fs.StringVar(&cfg.WhisperPrompt, "whisper-prompt", "", "Initial prompt for local Whisper (names, jargon).")
 
 	fs.BoolVar(&cfg.JSON, "json", true, "Output JSON to stdout (default true).")
 	fs.BoolVar(&cfg.JSONIndent, "json-indent", false, "Pretty-print JSON (default false).")
@@ -75,6 +88,13 @@ func Parse(args []string) (app.Config, ParseResult) {
 	}
 	if unset || deleteKey {
 		cfg.UnsetAPIKey = true
+	}
+	if !cfg.TimeoutSet {
+		if providers.IsLocal(cfg.Provider) {
+			cfg.TimeoutSeconds = 3600
+		} else {
+			cfg.TimeoutSeconds = 300
+		}
 	}
 	return cfg, ParseResultOK
 }
@@ -165,3 +185,77 @@ func (b *boolWithSetFlag) Set(s string) error {
 }
 
 func (b *boolWithSetFlag) IsBoolFlag() bool { return true }
+
+type intWithSetFlag struct {
+	Value  *int
+	WasSet *bool
+}
+
+func (i *intWithSetFlag) String() string {
+	if i == nil || i.Value == nil {
+		return ""
+	}
+	return strconv.Itoa(*i.Value)
+}
+
+func (i *intWithSetFlag) Set(s string) error {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	if i.Value != nil {
+		*i.Value = v
+	}
+	if i.WasSet != nil {
+		*i.WasSet = true
+	}
+	return nil
+}
+
+func parseDiarizer(args []string) (app.Config, ParseResult) {
+	var cfg app.Config
+	cfg.DiarizerCommand = true
+	cfg.JSON = true
+	cfg.TimeoutSeconds = 7200
+
+	var flags, positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+			if (arg == "--python" || arg == "-python" || arg == "--timeout" || arg == "-timeout") &&
+				i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+				flags = append(flags, args[i])
+			}
+		} else {
+			positional = append(positional, arg)
+		}
+	}
+
+	fs := flag.NewFlagSet("memos2txt diarizer", flag.ContinueOnError)
+	fs.SetOutput(&bytes.Buffer{})
+
+	var help bool
+	fs.BoolVar(&help, "h", false, "Show help and exit.")
+	fs.BoolVar(&help, "help", false, "Show help and exit.")
+	fs.StringVar(&cfg.DiarizerPython, "python", "3.12", "Python version/spec used for the managed environment.")
+	fs.BoolVar(&cfg.DiarizerForce, "force", false, "Recreate the environment from scratch.")
+	fs.BoolVar(&cfg.JSONIndent, "json-indent", false, "Pretty-print JSON.")
+	fs.BoolVar(&cfg.Verbose, "verbose", false, "Verbose install logs.")
+	fs.Var(&intWithSetFlag{Value: &cfg.TimeoutSeconds, WasSet: &cfg.TimeoutSet}, "timeout", "Timeout in seconds (default 7200).")
+
+	if err := fs.Parse(flags); err != nil {
+		cfg.ParseError = strings.TrimSpace(err.Error())
+		return cfg, ParseResultError
+	}
+	if help {
+		return cfg, ParseResultHelp
+	}
+	if len(positional) > 0 {
+		cfg.DiarizerAction = strings.ToLower(strings.TrimSpace(positional[0]))
+	} else {
+		cfg.DiarizerAction = "status"
+	}
+	return cfg, ParseResultOK
+}

@@ -10,6 +10,47 @@ import (
 	"time"
 )
 
+func TestAssemblyAISpeakerUtterances(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v2/upload":
+			_ = r.Body.Close()
+			_ = json.NewEncoder(w).Encode(map[string]string{"upload_url": "https://upload.example/audio"})
+		case r.Method == http.MethodPost && r.URL.Path == "/v2/transcript":
+			_ = r.Body.Close()
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": "t1"})
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v2/transcript/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": "t1", "status": "completed", "text": "hello there general kenobi",
+				"utterances": []map[string]any{
+					{"speaker": "A", "text": "hello there", "start": 0, "end": 1200},
+					{"speaker": "B", "text": "general kenobi", "start": 1300, "end": 2600},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	audio := writeTempFile(t, "a.m4a", "fake-audio")
+	c := NewAssemblyAIClient("k", AssemblyAIClientOptions{
+		BaseURL:      srv.URL,
+		Timeout:      2 * time.Second,
+		Model:        "best",
+		PollInterval: 10 * time.Millisecond,
+	})
+
+	text, err := c.Transcribe(context.Background(), audio, TranscribeOptions{Punctuate: true, Diarization: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[Speaker:A] hello there\n[Speaker:B] general kenobi"
+	if text != want {
+		t.Fatalf("text = %q, want %q", text, want)
+	}
+}
+
 func TestAssemblyAITranscribeUploadCreatePoll(t *testing.T) {
 	var gotAuthUpload string
 	var gotAuthCreate string

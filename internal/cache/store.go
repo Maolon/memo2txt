@@ -19,12 +19,14 @@ func NewTranscriptStore(dir string) TranscriptStore {
 }
 
 type Key struct {
-	SHA256      string
-	Provider    string
-	Model       string
-	Language    string
-	Diarization bool
-	Punctuate   bool
+	SHA256        string
+	Provider      string
+	Model         string
+	Language      string
+	Diarization   bool
+	Punctuate     bool
+	Diarizer      string
+	DiarizerModel string
 }
 
 type Metadata struct {
@@ -118,21 +120,38 @@ func (s TranscriptStore) WriteMetadata(path string, md Metadata) error {
 }
 
 func safeFileName(k Key) string {
-	model := strings.ReplaceAll(k.Model, ".", "_")
+	model := sanitizeToken(k.Model)
 	lang := k.Language
 	if strings.TrimSpace(lang) == "" {
 		lang = "auto"
 	}
-	lang = strings.ReplaceAll(lang, ".", "_")
+	lang = sanitizeToken(lang)
 
 	return strings.Join([]string{
 		k.SHA256,
-		k.Provider,
+		sanitizeToken(k.Provider),
 		model,
 		lang,
 		boolToken(k.Diarization, "d1", "d0"),
 		boolToken(k.Punctuate, "p1", "p0"),
-	}, ".")
+	}, ".") + diarizerSuffix(k)
+}
+
+func diarizerSuffix(k Key) string {
+	d := strings.TrimSpace(k.Diarizer)
+	if d == "" {
+		return ""
+	}
+	m := strings.TrimSpace(k.DiarizerModel)
+	if m == "" {
+		return "." + sanitizeToken(d)
+	}
+	return "." + sanitizeToken(d) + "." + sanitizeToken(m)
+}
+
+func sanitizeToken(s string) string {
+	r := strings.NewReplacer("/", "-", "\\", "-", ".", "_", ":", "_", " ", "-")
+	return r.Replace(strings.TrimSpace(s))
 }
 
 func boolToken(v bool, t, f string) string {

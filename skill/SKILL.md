@@ -1,11 +1,11 @@
 ---
 name: memo2txt
-description: Transcribe local audio files and Apple Voice Memos (.m4a, .caf, .mp3, .wav) into clean JSON transcripts using cloud ASR providers (Groq Whisper, Deepgram Nova-3, AssemblyAI) with deterministic content-hash caching and secure credentials. Use when the user asks to transcribe voice memos, audio recordings, meeting notes, speech-to-text, or manage speech API keys. Triggers include "transcribe audio", "transcribe memo", "voice memo to text", "memos2txt", "memo2txt", "m4a transcript", "speech to text", "audio transcription".
+description: Transcribe local audio files and Apple Voice Memos (.m4a, .caf, .mp3, .wav) into clean JSON transcripts using cloud ASR (Groq Whisper, Deepgram Nova-3, AssemblyAI) or local MLX Whisper on Apple Silicon, with optional pyannote speaker diarization, deterministic content-hash caching, and secure credentials. Use when the user asks to transcribe voice memos, audio recordings, meeting notes, speech-to-text, local/offline transcription, speaker diarization, or manage speech API keys. Triggers include "transcribe audio", "transcribe memo", "voice memo to text", "local whisper", "mlx whisper", "speaker diarization", "memos2txt", "memo2txt", "m4a transcript", "speech to text", "audio transcription".
 ---
 
 # memo2txt
 
-Transcribe local audio files and Apple Voice Memos (.m4a, .caf, .mp3, .wav) to structured JSON with cloud ASR (Groq, Deepgram, AssemblyAI). Transcripts are deduplicated and cached automatically by audio content hash.
+Transcribe local audio files and Apple Voice Memos (.m4a, .caf, .mp3, .wav) to structured JSON with cloud ASR (Groq, Deepgram, AssemblyAI) or local MLX Whisper (Apple Silicon), optionally with pyannote speaker labels. Transcripts are deduplicated and cached automatically by audio content hash.
 
 ## Quick reference
 
@@ -13,19 +13,28 @@ Transcribe local audio files and Apple Voice Memos (.m4a, .caf, .mp3, .wav) to s
 # Point to the compiled memos2txt binary
 MEMOS2TXT="memos2txt" # or /path/to/memo2txt/bin/memos2txt
 
-# 1. Manage API Keys
+# 1. Manage API keys / tokens
 $MEMOS2TXT auth --list
 echo "$GROQ_API_KEY" | $MEMOS2TXT auth groq --api-key-stdin
 echo "$DEEPGRAM_API_KEY" | $MEMOS2TXT auth deepgram --api-key-stdin
 echo "$ASSEMBLYAI_API_KEY" | $MEMOS2TXT auth assemblyai --api-key-stdin
+echo "$HF_TOKEN" | $MEMOS2TXT auth huggingface --api-key-stdin
 $MEMOS2TXT auth groq --unset
 
-# 2. Transcribe Audio File
+# 2. Cloud transcription
 $MEMOS2TXT --provider groq --file "/path/to/audio.m4a" --json
-$MEMOS2TXT --provider deepgram --file "/path/to/audio.m4a" --diarization=true --json
+$MEMOS2TXT --provider deepgram --file "/path/to/audio.m4a" --json
 $MEMOS2TXT --provider assemblyai --file "/path/to/audio.m4a" --json
 
-# 3. Force Re-transcription (Bypass Cache)
+# 3. Local transcription (Apple Silicon; provider id is mlx-whisper, category is local)
+$MEMOS2TXT --provider mlx-whisper --file "/path/to/audio.m4a" --json
+$MEMOS2TXT --provider mlx-whisper --model mlx-community/whisper-large-v3-turbo-4bit --file "/path/to/audio.m4a" --json
+
+# 4. Local speaker diarization (one-time setup)
+$MEMOS2TXT diarizer install
+$MEMOS2TXT --provider mlx-whisper --file "/path/to/meeting.m4a" --diarizer pyannote --json
+
+# 5. Force re-transcription (bypass cache)
 $MEMOS2TXT --provider groq --file "/path/to/audio.m4a" --no-cache --json
 ```
 
@@ -38,7 +47,7 @@ All standard runs emit **JSON only to stdout**. Diagnostics and logs go to stder
 ### 1. Authentication & Key Setup
 
 Credentials are checked in this order:
-1. Environment variables (`GROQ_API_KEY`, `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`)
+1. Environment variables (`GROQ_API_KEY`, `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`, `HF_TOKEN`)
 2. System secret store (macOS Keychain by default; `~/.memos2txt/config.json` on Linux)
 
 Check status of all adapters:
@@ -76,6 +85,42 @@ memos2txt --provider deepgram --file "/path/to/meeting.m4a" --json
 ```bash
 memos2txt --provider assemblyai --file "/path/to/lecture.m4a" --json
 ```
+
+---
+
+### 2b. Local Transcription & Speaker Diarization (Apple Silicon)
+
+Provider taxonomy: category `local`, provider id `mlx-whisper`. The literal `--provider local` is rejected; use `--provider mlx-whisper`.
+
+```bash
+# Local ASR (no audio leaves the machine)
+memos2txt --provider mlx-whisper --file "/path/to/recording.m4a" --json
+
+# Low-disk MLX model (~463 MB instead of ~1.6 GB)
+memos2txt --provider mlx-whisper \
+  --model mlx-community/whisper-large-v3-turbo-4bit \
+  --file "/path/to/recording.m4a" --json
+
+# One-time diarization runtime + token setup
+memos2txt diarizer install
+# Accept terms: https://huggingface.co/pyannote/speaker-diarization-community-1
+echo "$HF_TOKEN" | memos2txt auth huggingface --api-key-stdin
+
+# Transcribe + speaker labels
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
+  --diarizer pyannote --timestamps --json
+
+# Known speaker count / CPU fallback
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
+  --diarizer pyannote --num-speakers 3 --json
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" \
+  --diarizer pyannote --diarizer-device cpu --json
+
+memos2txt diarizer status
+memos2txt diarizer uninstall
+```
+
+Requirements: `mlx_whisper` (Homebrew), `ffmpeg`, `HF_TOKEN`, and ~1–2 GB for the managed pyannote environment. Pyannote runs locally; only model weights are downloaded from Hugging Face.
 
 ---
 
@@ -157,7 +202,9 @@ For audio files exceeding 25MB or 1 hour (3600s) duration:
 If `ok` is `false`, inspect `error.code`:
 - `FILE_NOT_FOUND`: Specified audio file does not exist.
 - `FILE_UNREADABLE`: Missing read permissions on file.
-- `API_KEY_MISSING`: Set API key via `memos2txt auth <provider>` or environment variable.
+- `API_KEY_MISSING`: Set API key via `memos2txt auth <provider>` or environment variable. For local diarization, also accept the Hugging Face model terms.
 - `PROVIDER_ERROR`: Upstream cloud provider rejected request.
+- `LOCAL_DEPENDENCY_MISSING`: Install `mlx_whisper`, `ffmpeg`, or run `memos2txt diarizer install`.
+- `DIARIZATION_FAILED`: pyannote failed; retry with `--diarizer-device cpu` and inspect stderr.
 - `TIMEOUT`: Request exceeded timeout limit (increase with `--timeout <seconds>`).
 - `INVALID_ARGS`: Missing required flags or invalid provider name.

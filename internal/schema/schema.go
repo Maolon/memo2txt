@@ -3,37 +3,45 @@ package schema
 type ErrorCode string
 
 const (
-	ErrNoMatch               ErrorCode = "NO_MATCH"
-	ErrFileNotFound          ErrorCode = "FILE_NOT_FOUND"
-	ErrFileUnreadable        ErrorCode = "FILE_UNREADABLE"
-	ErrAPIKeyMissing         ErrorCode = "API_KEY_MISSING"
-	ErrUploadFailed          ErrorCode = "UPLOAD_FAILED"
-	ErrTimeout               ErrorCode = "TIMEOUT"
-	ErrProviderError         ErrorCode = "PROVIDER_ERROR"
-	ErrTranscriptWriteFailed ErrorCode = "TRANSCRIPT_WRITE_FAILED"
-	ErrInvalidArgs           ErrorCode = "INVALID_ARGS"
+	ErrNoMatch                ErrorCode = "NO_MATCH"
+	ErrFileNotFound           ErrorCode = "FILE_NOT_FOUND"
+	ErrFileUnreadable         ErrorCode = "FILE_UNREADABLE"
+	ErrAPIKeyMissing          ErrorCode = "API_KEY_MISSING"
+	ErrUploadFailed           ErrorCode = "UPLOAD_FAILED"
+	ErrTimeout                ErrorCode = "TIMEOUT"
+	ErrProviderError          ErrorCode = "PROVIDER_ERROR"
+	ErrTranscriptWriteFailed  ErrorCode = "TRANSCRIPT_WRITE_FAILED"
+	ErrInvalidArgs            ErrorCode = "INVALID_ARGS"
+	ErrLocalDependencyMissing ErrorCode = "LOCAL_DEPENDENCY_MISSING"
+	ErrDiarizationFailed      ErrorCode = "DIARIZATION_FAILED"
 )
 
 type Response struct {
-	OK         bool            `json:"ok"`
-	CacheHit   bool            `json:"cache_hit,omitempty"`
-	Provider   string          `json:"provider,omitempty"`
-	Model      string          `json:"model,omitempty"`
-	Mode       string          `json:"mode,omitempty"`
-	Options    *Options        `json:"options,omitempty"`
-	Input      *InputInfo      `json:"input,omitempty"`
-	Output     *OutputInfo     `json:"output,omitempty"`
-	Preprocess *PreprocessInfo `json:"preprocess,omitempty"`
-	Note       string          `json:"note,omitempty"`
-	Error      *ErrorInfo      `json:"error,omitempty"`
-	Setup      *SetupInfo      `json:"setup,omitempty"`
-	Version    string          `json:"version,omitempty"`
+	OK          bool             `json:"ok"`
+	CacheHit    bool             `json:"cache_hit,omitempty"`
+	Category    string           `json:"category,omitempty"` // "cloud" | "local"
+	Provider    string           `json:"provider,omitempty"`
+	Model       string           `json:"model,omitempty"`
+	Mode        string           `json:"mode,omitempty"`
+	Options     *Options         `json:"options,omitempty"`
+	Input       *InputInfo       `json:"input,omitempty"`
+	Output      *OutputInfo      `json:"output,omitempty"`
+	Preprocess  *PreprocessInfo  `json:"preprocess,omitempty"`
+	Diarization *DiarizationInfo `json:"diarization,omitempty"`
+	LocalEnv    *LocalEnvInfo    `json:"local_env,omitempty"`
+	Note        string           `json:"note,omitempty"`
+	Error       *ErrorInfo       `json:"error,omitempty"`
+	Setup       *SetupInfo       `json:"setup,omitempty"`
+	Version     string           `json:"version,omitempty"`
 }
 
 type Options struct {
-	Language    string `json:"language,omitempty"`
-	Diarization bool   `json:"diarization,omitempty"`
-	Punctuate   bool   `json:"punctuate,omitempty"`
+	Language      string `json:"language,omitempty"`
+	Diarization   bool   `json:"diarization,omitempty"`
+	Punctuate     bool   `json:"punctuate,omitempty"`
+	Diarizer      string `json:"diarizer,omitempty"`
+	DiarizerModel string `json:"diarizer_model,omitempty"`
+	Timestamps    bool   `json:"timestamps,omitempty"`
 }
 
 type InputInfo struct {
@@ -61,6 +69,39 @@ type SetupInfo struct {
 	Store  string            `json:"store,omitempty"`
 	EnvVar string            `json:"env_var,omitempty"`
 	Status map[string]string `json:"status,omitempty"`
+}
+
+type SpeakerInfo struct {
+	ID            string  `json:"id"`
+	Label         string  `json:"label"`
+	Turns         int     `json:"turns"`
+	SpeechSeconds float64 `json:"speech_seconds"`
+}
+
+type DiarizationInfo struct {
+	Enabled      bool          `json:"enabled"`
+	Diarizer     string        `json:"diarizer,omitempty"`
+	Model        string        `json:"model,omitempty"`
+	Device       string        `json:"device,omitempty"`
+	SpeakerCount int           `json:"speaker_count,omitempty"`
+	Speakers     []SpeakerInfo `json:"speakers,omitempty"`
+	Seconds      float64       `json:"seconds,omitempty"`
+	Note         string        `json:"note,omitempty"`
+}
+
+// LocalEnvInfo reports the state of a local model runtime (currently the
+// pyannote diarization environment managed by `memos2txt diarizer`).
+type LocalEnvInfo struct {
+	Kind            string `json:"kind,omitempty"`
+	Installed       bool   `json:"installed"`
+	VenvPath        string `json:"venv_path,omitempty"`
+	Python          string `json:"python,omitempty"`
+	PythonVersion   string `json:"python_version,omitempty"`
+	PyannoteVersion string `json:"pyannote_version,omitempty"`
+	Model           string `json:"model,omitempty"`
+	Device          string `json:"device,omitempty"`
+	HFConfigured    bool   `json:"hf_configured"`
+	Note            string `json:"note,omitempty"`
 }
 
 type PreprocessInfo struct {

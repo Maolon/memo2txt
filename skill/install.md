@@ -31,8 +31,9 @@ Extract and copy `memos2txt` into your PATH (e.g. `/usr/local/bin/` or `~/.local
 
 ## Agent Verification & Setup
 
-After installing the binary, configure at least one cloud ASR API key:
+After installing the binary, configure at least one ASR path:
 
+**Cloud (Groq / Deepgram / AssemblyAI):**
 ```bash
 # Check configuration
 memos2txt auth --list
@@ -42,7 +43,22 @@ echo "$GROQ_API_KEY" | memos2txt auth groq --api-key-stdin
 echo "$DEEPGRAM_API_KEY" | memos2txt auth deepgram --api-key-stdin
 ```
 
+**Local (Apple Silicon):**
+```bash
+# ASR runtime
+brew install mlx-whisper ffmpeg
+memos2txt --provider mlx-whisper --file "/path/to/audio.m4a" --json
+
+# Optional speaker diarization (pyannote community-1)
+memos2txt diarizer install
+# Accept terms: https://huggingface.co/pyannote/speaker-diarization-community-1
+echo "$HF_TOKEN" | memos2txt auth huggingface --api-key-stdin
+memos2txt --provider mlx-whisper --file "/path/to/meeting.m4a" --diarizer pyannote --json
+```
+
 Verify ready state:
 ```bash
 memos2txt -h
+memos2txt auth --list
+memos2txt diarizer status
 ```

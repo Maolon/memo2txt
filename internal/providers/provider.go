@@ -7,44 +7,38 @@ import (
 	"memos2txt/internal/schema"
 )
 
+// FileTranscriber transcribes a local audio file to plain text.
 type FileTranscriber interface {
 	Transcribe(ctx context.Context, audioPath string, opts TranscribeOptions) (string, error)
 }
 
+// SegmentTranscriber exposes timed segments so local diarization can assign
+// speakers to each utterance. Implemented by local ASR providers.
+type SegmentTranscriber interface {
+	TranscribeSegments(ctx context.Context, audioPath string, opts TranscribeOptions) ([]Segment, error)
+}
+
 type TranscribeOptions struct {
-	Language    string
-	Diarization bool
-	Punctuate   bool
+	Language      string
+	Diarization   bool
+	Punctuate     bool
+	Timestamps    bool
+	InitialPrompt string
 }
 
-func AllProviders() []string {
-	return []string{"groq", "deepgram", "assemblyai"}
+// Segment is a timed ASR fragment. Words is optional and populated by engines
+// that can emit word-level timestamps.
+type Segment struct {
+	Start float64
+	End   float64
+	Text  string
+	Words []Word
 }
 
-func EnvVarForProvider(provider string) (string, bool) {
-	switch provider {
-	case "groq":
-		return "GROQ_API_KEY", true
-	case "deepgram":
-		return "DEEPGRAM_API_KEY", true
-	case "assemblyai":
-		return "ASSEMBLYAI_API_KEY", true
-	default:
-		return "", false
-	}
-}
-
-func DefaultModel(provider string) string {
-	switch provider {
-	case "groq":
-		return "whisper-large-v3"
-	case "deepgram":
-		return "nova-3"
-	case "assemblyai":
-		return "best"
-	default:
-		return ""
-	}
+type Word struct {
+	Text  string
+	Start float64
+	End   float64
 }
 
 func MapProviderError(err error) (schema.ErrorCode, string, string) {

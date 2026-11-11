@@ -69,10 +69,17 @@ type assemblyCreateTranscriptResponse struct {
 }
 
 type assemblyTranscriptResponse struct {
-	ID     string `json:"id"`
-	Status string `json:"status"` // queued|processing|completed|error
-	Text   string `json:"text"`
-	Error  string `json:"error"`
+	ID         string `json:"id"`
+	Status     string `json:"status"` // queued|processing|completed|error
+	Text       string `json:"text"`
+	Error      string `json:"error"`
+	Utterances []struct {
+		Speaker    string  `json:"speaker"`
+		Text       string  `json:"text"`
+		Start      int64   `json:"start"`
+		End        int64   `json:"end"`
+		Confidence float64 `json:"confidence"`
+	} `json:"utterances"`
 }
 
 func (c *AssemblyAIClient) Transcribe(ctx context.Context, audioPath string, opts TranscribeOptions) (string, error) {
@@ -250,6 +257,23 @@ func (c *AssemblyAIClient) pollTranscript(ctx context.Context, id string) (strin
 
 		switch strings.ToLower(strings.TrimSpace(tr.Status)) {
 		case "completed":
+			if len(tr.Utterances) > 0 {
+				var sb strings.Builder
+				for _, u := range tr.Utterances {
+					text := strings.TrimSpace(u.Text)
+					if text == "" {
+						continue
+					}
+					speaker := strings.TrimSpace(u.Speaker)
+					if speaker == "" {
+						speaker = "?"
+					}
+					sb.WriteString(fmt.Sprintf("[Speaker:%s] %s\n", speaker, text))
+				}
+				if out := strings.TrimSuffix(sb.String(), "\n"); strings.TrimSpace(out) != "" {
+					return out, nil
+				}
+			}
 			return tr.Text, nil
 		case "error":
 			return "", ProviderError{Code: schema.ErrProviderError, Message: "Provider error.", Detail: tr.Error}

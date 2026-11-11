@@ -1,7 +1,7 @@
 class Memos2txt < Formula
-  desc "Audio Files to Cloud ASR (Groq / Deepgram / AssemblyAI) to Deterministic JSON"
+  desc "Audio Files to Cloud or Local ASR (Groq / Deepgram / AssemblyAI / mlx-whisper) with Speaker Diarization and Deterministic JSON"
   homepage "https://github.com/Maolon/memo2txt"
-  version "0.1.0"
+  version "0.2.0"
   license "MIT"
 
   on_macos do

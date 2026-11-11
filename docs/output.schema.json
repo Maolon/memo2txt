@@ -7,14 +7,18 @@
     "ok": { "type": "boolean" },
     "cache_hit": { "type": "boolean" },
     "provider": { "type": "string" },
+    "category": { "type": "string", "enum": ["cloud", "local"] },
     "model": { "type": "string" },
-    "mode": { "type": "string", "enum": ["transcribe", "setup", "auth"] },
+    "mode": { "type": "string", "enum": ["transcribe", "setup", "auth", "diarizer_setup"] },
     "options": {
       "type": "object",
       "properties": {
         "language": { "type": "string" },
         "diarization": { "type": "boolean" },
-        "punctuate": { "type": "boolean" }
+        "punctuate": { "type": "boolean" },
+        "diarizer": { "type": "string" },
+        "diarizer_model": { "type": "string" },
+        "timestamps": { "type": "boolean" }
       },
       "additionalProperties": false
     },
@@ -44,7 +48,7 @@
       "required": ["triggered"],
       "properties": {
         "triggered": { "type": "boolean" },
-        "reason": { "type": "string", "enum": ["threshold", "provider_413"] },
+        "reason": { "type": "string", "enum": ["threshold", "provider_413", "local_diarization", "local_normalize"] },
         "mode": { "type": "string", "enum": ["normalized", "chunked"] },
         "threshold_mb": { "type": "integer" },
         "temp_kept": { "type": "boolean" },
@@ -58,6 +62,51 @@
         "chunk_paths": { "type": "array", "items": { "type": "string" } },
         "chunk_transcribe_seconds": { "type": "array", "items": { "type": "number" } },
         "total_seconds": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "diarization": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "diarizer": { "type": "string" },
+        "model": { "type": "string" },
+        "device": { "type": "string" },
+        "speaker_count": { "type": "integer" },
+        "speakers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "turns", "speech_seconds"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "turns": { "type": "integer" },
+              "speech_seconds": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "seconds": { "type": "number" },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "local_env": {
+      "type": "object",
+      "required": ["installed", "hf_configured"],
+      "properties": {
+        "kind": { "type": "string" },
+        "installed": { "type": "boolean" },
+        "venv_path": { "type": "string" },
+        "python": { "type": "string" },
+        "python_version": { "type": "string" },
+        "pyannote_version": { "type": "string" },
+        "model": { "type": "string" },
+        "device": { "type": "string" },
+        "hf_configured": { "type": "boolean" },
+        "note": { "type": "string" }
       },
       "additionalProperties": false
     },
@@ -88,7 +137,9 @@
             "TIMEOUT",
             "PROVIDER_ERROR",
             "TRANSCRIPT_WRITE_FAILED",
-            "INVALID_ARGS"
+            "INVALID_ARGS",
+            "LOCAL_DEPENDENCY_MISSING",
+            "DIARIZATION_FAILED"
           ]
         },
         "message": { "type": "string" },

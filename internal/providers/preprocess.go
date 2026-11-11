@@ -68,6 +68,49 @@ func NormalizeToMP3(ctx context.Context, inputPath, outputPath string, opts Prep
 	return nil
 }
 
+// NormalizeToWAV converts any supported input to 16 kHz mono PCM WAV. Local
+// diarization loads the file with soundfile, so a decoded container-independent
+// file is required.
+func NormalizeToWAV(ctx context.Context, inputPath, outputPath string, opts PreprocessOptions) error {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return ProviderError{
+			Code:    schema.ErrLocalDependencyMissing,
+			Message: "ffmpeg not found (required for local diarization).",
+			Detail:  "Install ffmpeg, or run without --diarizer.",
+		}
+	}
+
+	sampleRate := opts.SampleRateHz
+	if sampleRate <= 0 {
+		sampleRate = 16000
+	}
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o700); err != nil {
+		return ProviderError{Code: schema.ErrProviderError, Message: "Failed to create temp dir.", Detail: err.Error()}
+	}
+
+	args := []string{"-hide_banner", "-y"}
+	if !opts.VerboseStderr {
+		args = append(args, "-loglevel", "error")
+	}
+	args = append(args,
+		"-i", inputPath,
+		"-vn",
+		"-ac", "1",
+		"-ar", fmt.Sprintf("%d", sampleRate),
+		"-c:a", "pcm_s16le",
+		outputPath,
+	)
+
+	cmd := exec.CommandContext(ctx, ffmpeg, args...)
+	cmd.Stdout = nil
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return ProviderError{Code: schema.ErrProviderError, Message: "ffmpeg WAV normalization failed.", Detail: err.Error()}
+	}
+	return nil
+}
+
 func SegmentToChunks(ctx context.Context, inputPath, chunksDir string, opts PreprocessOptions) ([]string, error) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
